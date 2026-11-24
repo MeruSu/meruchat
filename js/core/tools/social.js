@@ -323,8 +323,9 @@ export function createInviteToGroupTool({ store, convId, getResponder, onChanged
   return {
     name: "invite_to_group",
     description:
-      "把**另一个会话**的成员复制一份拉进群（默认拉进**当前这个群**）。不是引用：被拉进来的是群里的新成员行，" +
-      "之后群里的发言与原来那个会话各自独立。只有群聊能拉人；自己正在私聊里就不能用。" +
+      "把**另一个会话**拉进群（默认拉进**当前这个群**）。是**引用**不是复制：被拉进来的还是它自己那条会话，" +
+      "名字、人设、头像、配色都共用一份，在群里改、在它自己的会话里也会变（DEV.md §2.8）。" +
+      "只有群聊能拉人；自己正在私聊里就不能用。" +
       "convId 是要拉的那个会话 id，groupId 不给就是当前群 —— 两个都可以用 list_conversations 查。",
     executionMode: "sequential",
     parameters: {
@@ -394,7 +395,8 @@ export function createKickFromGroupTool({ store, convId, getResponder, onChanged
   return {
     name: "kick_from_group",
     description:
-      "把**某个会话在群里复制出来的那些成员行**删掉，并给它写上 3 分钟冷却（这 3 分钟内它不能再申请进群）。" +
+      "把**某个会话**从这个群里移出去（只删群里的那条引用，它自己的会话、人设、历史都还在），" +
+      "并给它写上 3 分钟冷却（这 3 分钟内它不能再进群）。" +
       "只有群聊能用，且不许踢自己。convId 是要踢出去的那个会话 id（用 list_conversations 查）。",
     executionMode: "sequential",
     parameters: {
