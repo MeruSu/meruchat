@@ -52,7 +52,7 @@ const APP_VERSION = "0.1.0";
 // 版本清单走 raw.githubusercontent（CORS 放开、无限流），不走 api.github.com：
 // 后者匿名 60 次/小时/IP，且 /releases/latest 会排除 pre-release，我们首个版本就是 pre-release。
 const VERSION_MANIFEST =
-  "https://raw.githubusercontent.com/MeruSu/meruchat/main/webapp/version.json";
+  "https://raw.githubusercontent.com/MeruSu/meruchat/main/version.json";
 const RELEASES_PAGE = "https://github.com/MeruSu/meruchat/releases";
 
 /** 当前 App 版本：Capacitor App 插件优先（try/catch + await），拿不到回落 APP_VERSION */
