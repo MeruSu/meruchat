@@ -39,14 +39,42 @@ const WALLPAPER_ALIASES = {
 /** 上下文预算默认值（§2.6）：8000 token；0 = 关闭压缩，全量直喂 */
 export const DEFAULT_CONTEXT_BUDGET = 8000;
 
+/**
+ * 默认接口地址。
+ * 网页版跑在 dev-server 上，`/gw/v1` 是同源反代（见 dev-server.mjs）。
+ * 装成 App 之后没有那个反代：Capacitor 的 origin 是 `https://localhost`（androidScheme:"https"），
+ * 同源请求会打到 App 自己身上，所以默认走云端网关的 `/cors/` 前缀（magpie 不自己发 CORS 头）。
+ * 用户随时可以在设置页改掉。
+ */
+function defaultBaseUrl() {
+  try {
+    const loc = globalThis.location;
+    if (loc && loc.protocol === "https:" && loc.hostname === "localhost") return "https://gw.ms7.pw/cors/v1";
+  } catch (e) {}
+  return "/gw/v1";
+}
+
+/**
+ * 默认模型。
+ * 本机 magpie 的 `group/meru` 是本地别名（100 万上下文）；云端网关没有这个别名，
+ * 那边叫 `auto/...`（自动路由）或 `provider/model`。App 默认用云端的 auto。
+ */
+function defaultModel() {
+  try {
+    const loc = globalThis.location;
+    if (loc && loc.protocol === "https:" && loc.hostname === "localhost") return "auto/deepseek-v4.1-flash";
+  } catch (e) {}
+  return "group/meru";
+}
+
 /** 默认用户（= 原来的全局设置；模型/接口这几项也在同一对象里） */
 export const DEFAULT_SETTINGS = {
   name: "内测用户01",
   avatar: { label: "内", color: "#f5a623" },
   accent: DEFAULT_ACCENT,
   defaultWallpaper: "aurora",
-  baseUrl: "/gw/v1",
-  model: "group/meru",
+  baseUrl: defaultBaseUrl(),
+  model: defaultModel(),
   apiKey: "",
   searchUrl: "/search",
   searchKey: "",
