@@ -2,7 +2,14 @@
    只管壳：页面底色、卡片容器的 flex/gap/圆角/边框、卡片内部滚动、空态卡、错误卡、
    窄屏全局返回按钮。任何一张卡自己的业务样式都不在这里：
      会话列表 → card-list.css，聊天 → card-chat.css，详情 → card-detail.css，设置 → card-settings.css
-   设计基准：C:\Meru\website\su\preview\styles.html（.app / .phone-win 两段）。 */
+   设计基准：C:\Meru\website\su\preview\styles.html（.app / .phone-win 两段）。
+
+   2026-11-25（手机壳 + 掉帧修正，改这三件事的原因）：
+   1) Capacitor 里 js/shell.js 给 body 挂 .is-native → 一张卡铺满整屏、无边框无圆角，
+      安全区只在 .cards 的 padding 里吃一次（四边一处解决）；桌面网页没有这个类，行为不变。
+   2) 掉帧主因是「整屏面积上的 background-color 过渡」：body / .card 是全屏元素，过渡背景色
+      等于每帧重绘整屏。这两者已去掉背景色过渡，只留 color / border-color。
+   3) 滚动容器（.chat-body / .conv-list）加 contain: paint，滚动时浏览器不必为整页重算。 */
 
 /* ---------------------------------------------------------------- 页面 */
 html,
@@ -48,6 +55,18 @@ body {
   flex-flow: column nowrap;
 }
 
+/* ---------------------------------------------------------------- 手机壳（Capacitor：body.is-native）
+   js/shell.js 只在原生容器里给 body 挂 .is-native；桌面网页没有这个类，下面两条不生效，
+   网页上「两张卡并排 + 8px 边距 + 12px 圆角边框」保持原样（用户已验收）。
+   一张卡铺满整屏 = App 的一页，而不是「网页里飘着的一张卡」。
+   安全区只在这里吃一次：padding: 0 先兜底（不支持 env() 时就是 0），再用 env() 覆盖四边，
+   顺序不能反——反过来 padding: 0 会把安全区覆盖掉。 */
+body.is-native .cards {
+  padding: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  gap: 0;
+}
+
 /* ---------------------------------------------------------------- 卡片外壳（对应 styles.html 的 .phone-win） */
 .card {
   position: relative;
@@ -64,6 +83,13 @@ body {
   box-shadow: none; /* 用户明确要求：不要阴影 */
 }
 
+/* 手机壳：同上，卡片贴边（不写 overflow，沿用基线的 hidden） */
+body.is-native .card {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* 卡片内所有滚动容器统一隐藏滚动条（内容仍可滚） */
 .card * {
   scrollbar-width: none;
@@ -72,6 +98,14 @@ body {
 .card *::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+/* 滚动容器自带绘制边界（2026-11-25 掉帧修正）：消息区与会话列表每次滚动/插入都要重绘，
+   没有 containment 时浏览器可能从整页范围去算。这两个容器本来就是 overflow:auto 的裁剪盒，
+   加 paint containment 不改变任何可见结果，只是告诉浏览器「重绘别超出我」。 */
+.chat-body,
+.conv-list {
+  contain: paint;
 }
 
 /* 卡片内容铺满：卡片里第一个直接子元素（卡片自建的根容器）撑满剩余高度 */
@@ -133,7 +167,10 @@ body {
    @keyframes 与时长 token 全在 css/motion.css（唯一动效层，硬规则）。
    这里只做「把类挂到壳的元素上」和 reference token，不写任何数字时长。 */
 
-/* 卡片进场：窄屏 push 带 24px 位移，宽屏只淡入（见 shell.js mountInto） */
+/* 卡片进场：窄屏 push 带 24px 位移，宽屏只淡入（见 shell.js mountInto）
+   will-change 在这里是安全的：shell.js playEnter 的 animationend 回调会立刻删掉 anim-card-* 类
+   （js/shell.js:186），所以它只在动画那 260ms 里占显存，不是常驻。常驻 will-change 会把整张
+   全屏卡钉成一个 GPU 层，那才是显存杀手——别把它挪到 .card 基线上。 */
 .card.anim-card-push,
 .card.anim-card-fade {
   will-change: transform, opacity;
@@ -149,9 +186,17 @@ body {
   animation: anim-wall-fade var(--dur-3) var(--ease-out) both;
 }
 
-/* 主题色 / 壁纸切换：吃 --accent* 的元素做颜色过渡（硬规则 1：只动颜色，不动尺寸） */
+/* 主题色 / 壁纸切换：吃 --accent* 的元素做颜色过渡（硬规则 1：只动颜色，不动尺寸）
+   2026-11-25 掉帧修正：body 与 .card 都是**整屏面积**的元素，过渡 background-color 会让浏览器
+   每帧重绘整屏（规范上 background-color 不可合成，只能在主线程重绘）——手机上切主题/壁纸时
+   卡顿就出在这两条。现在它们只过渡 color / border-color（1px 边框、文字，重绘面积可忽略），
+   背景色的变化交给 #wallpaper 自己的 anim-wall-fade 淡入去掩盖。
+   头像面积只有几十像素，background-color 过渡留着——那个重绘量买得到主题切换的连贯感。 */
 body,
-.card,
+.card {
+  transition: color var(--dur-3) var(--ease-out),
+    border-color var(--dur-3) var(--ease-out);
+}
 .c-ava,
 .big-ava,
 .chat-head .ava,
@@ -161,7 +206,9 @@ body,
     border-color var(--dur-3) var(--ease-out);
 }
 
-/* ---------------------------------------------------------------- 轻提示（壳的 toast()） */
+/* ---------------------------------------------------------------- 轻提示（壳的 toast()）
+   已经是最便宜的组合：只过渡 opacity + transform（都是合成属性），没有 box-shadow / filter，
+   不需要改。（components.css:81 有一份同名的旧定义，被这里按加载顺序覆盖，内容等价。） */
 .toast {
   position: fixed;
   left: 50%;

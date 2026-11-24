@@ -13,3 +13,62 @@
 .card.card-settings::-webkit-scrollbar {
   display: none;
 }
+
+/* 卡底「检查更新」：版本只读展示 + 检查/下载按钮一行 + 三态提示 + 小字说明。
+   还是只写外框（排版/间距），颜色全读 token：正文 --panel-fg、强调 --accent、失败 --danger。 */
+.card-settings .update-box {
+  margin-bottom: 22px;
+}
+.card-settings .update-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.card-settings .update-ver {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--panel-fg);
+}
+.card-settings .update-btn {
+  flex: 0 0 auto;
+}
+.card-settings .update-btn[disabled] {
+  opacity: 0.6;
+  cursor: default;
+  filter: none;
+}
+.card-settings .update-dl-btn {
+  flex: 0 0 auto;
+  border-color: var(--accent, var(--panel-line));
+  color: var(--accent, var(--panel-fg));
+}
+.card-settings .update-dl-btn[hidden] {
+  display: none;
+}
+.card-settings .update-status {
+  font-size: 12.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.card-settings .update-status[hidden] {
+  display: none;
+}
+.card-settings .update-status-new {
+  color: var(--accent, var(--panel-fg));
+  font-weight: 600;
+}
+.card-settings .update-status-ok {
+  opacity: 0.75;
+}
+.card-settings .update-status-fail {
+  color: var(--danger, #d94f4f);
+}
+.card-settings .update-note {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  opacity: 0.55;
+}

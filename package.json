@@ -51,5 +51,8 @@
     "type": "git",
     "url": "git+https://github.com/MeruSu/meruchat.git"
   },
-  "homepage": "https://github.com/MeruSu/meruchat#readme"
+  "homepage": "https://github.com/MeruSu/meruchat#readme",
+  "dependencies": {
+    "@capacitor/app": "^8.1.2"
+  }
 }

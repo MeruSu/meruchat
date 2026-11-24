@@ -508,10 +508,140 @@ export function createShell(opts = {}) {
     }, RESIZE_THROTTLE);
   }
 
+  // ================================================================ 原生壳（Capacitor App）
+  // 网页里没有 window.Capacitor：下面整段空转（不加 class、不注册返回键）。
+  // 不用 import "@capacitor/app"：没有打包器，裸包名浏览器解析不了，只能取运行时全局。
+  const NATIVE_CLASS = "is-native"; // CSS 钩子，样式归 css/，本文件不写样式
+  const EXIT_WINDOW_MS = 2000; // 双击退出的时间窗
+
+  let nativeBackHandle = null; // addListener("backButton") 的 handle
+  let nativeBackGone = false; // destroy 早于 handle 落地时，落地后立刻退订
+  let nativeSetupDone = false; // start() 只接一次，重复 start 不重复注册
+  let lastBackAt = 0; // 上一次在列表页按返回的时间戳
+
+  /** Capacitor 桥只在 App 里注入；网页里 window.Capacitor 是 undefined，用 try/catch 兜住 */
+  function isNative() {
+    try {
+      const cap = window.Capacitor;
+      return !!(cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform());
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** 运行时全局里的原生 App 插件；没有就是网页 */
+  function nativeApp() {
+    try {
+      return window.Capacitor?.Plugins?.App || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** body 上的 is-native：加与摘都幂等，重复调用不报错 */
+  function setNativeClass(on) {
+    try {
+      const body = document.body;
+      if (!body || !body.classList) return;
+      if (on) body.classList.add(NATIVE_CLASS);
+      else body.classList.remove(NATIVE_CLASS);
+    } catch (e) {
+      /* classList 出问题也不能挡住启动 */
+    }
+  }
+
+  /**
+   * 关最上层弹层。
+   * atoms 的 openOverlay 在 document 上接 Escape；详情卡自建的 .modal-mask 只接了「点遮罩」。
+   * 点遮罩（e.target === mask）两边都通，而且一次只关一层，所以走这条。
+   * @returns {boolean} 有没有弹层（遮罩/菜单/确认框）
+   */
+  function closeTopOverlay() {
+    const masks = document.querySelectorAll(".modal-mask");
+    if (!masks || !masks.length) return false;
+    const mask = masks[masks.length - 1]; // 后挂上的在最上面
+    if (typeof mask.click === "function") {
+      mask.click(); // close() 自己幂等：正在退场的再点一次也没事
+      return true;
+    }
+    // 兜底：atoms 在 document 上接 keydown Escape
+    try {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    } catch (e) {
+      /* 没有 KeyboardEvent 构造器就放弃，别把返回键卡死 */
+    }
+    return true;
+  }
+
+  /** 安卓返回键：① 弹层 → ② 栈内返回 → ③ 列表页双击退出 */
+  function onNativeBack() {
+    if (closeTopOverlay()) return;
+    if (router.depth() > 1) {
+      router.back();
+      return;
+    }
+    // 已经在列表页：2 秒内第二按才真退，超时重新计时
+    const now = Date.now();
+    if (lastBackAt && now - lastBackAt <= EXIT_WINDOW_MS) {
+      lastBackAt = 0;
+      try {
+        const app = nativeApp();
+        const p = app && typeof app.exitApp === "function" ? app.exitApp() : null;
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch (e) {
+        /* 退不掉也别抛，否则下一次返回键没人接 */
+      }
+      return;
+    }
+    lastBackAt = now;
+    events.emit("toast", { text: "再按一次退出" });
+  }
+
+  /** 退订返回键；重复调用不报错 */
+  function removeNativeBack() {
+    nativeBackGone = true;
+    const handle = nativeBackHandle;
+    nativeBackHandle = null;
+    if (!handle || typeof handle.remove !== "function") return;
+    try {
+      const p = handle.remove();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch (e) {
+      /* 已经退订过 */
+    }
+  }
+
+  /** 只在原生壳里接返回键；网页里直接返回，什么都不做 */
+  function setupNative() {
+    if (nativeSetupDone) return;
+    if (!isNative()) return;
+    nativeSetupDone = true;
+    setNativeClass(true);
+    const app = nativeApp();
+    if (!app || typeof app.addListener !== "function") return;
+    try {
+      const ret = app.addListener("backButton", onNativeBack);
+      // Capacitor 4+ 返回 Promise<PluginListenerHandle>，更老的直接返回 handle
+      if (ret && typeof ret.then === "function") {
+        ret
+          .then((handle) => {
+            nativeBackHandle = handle || null;
+            if (nativeBackGone) removeNativeBack(); // destroy 先到了
+          })
+          .catch(() => {});
+      } else {
+        nativeBackHandle = ret || null;
+      }
+    } catch (e) {
+      console.warn("[shell] 返回键注册失败", e);
+    }
+  }
+
   // ================================================================ 启动
   async function start() {
     wide = isWide();
     syncLayoutClasses();
+    setupNative(); // 原生壳：body 打 is-native + 接安卓返回键（网页里空转）
 
     // 首屏：.cards 整体淡入，防白闪（§2.5 第 4 项）。类只挂一次，start() 之后不再重放。
     playEnter(root, "anim-cards-in");
@@ -546,6 +676,10 @@ export function createShell(opts = {}) {
       if (toastTimer) clearTimeout(toastTimer);
       // 夺屏监听（§2.7.4）必须跟着退订，否则壳销毁后事件还会把路由推回去
       if (typeof offTakeover === "function") offTakeover();
+      // 原生：退订返回键、摘掉 is-native（重复 destroy 不报错）
+      removeNativeBack();
+      setNativeClass(false);
+      lastBackAt = 0;
     },
   };
 }

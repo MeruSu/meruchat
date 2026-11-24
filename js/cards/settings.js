@@ -5,7 +5,7 @@
 // 背景的两层归属见 docs/DEV.md §2.2.1：这里改的是「全局默认」，单会话覆盖在详情卡。
 "use strict";
 
-import { el } from "../core/util.js";
+import { el, errorText } from "../core/util.js";
 import { getSelf, DEFAULT_CONTEXT_BUDGET } from "../core/store.js";
 import { renderAvatar } from "../ui/avatar.js";
 
@@ -43,6 +43,66 @@ function parseBudget(raw) {
   const n = Number(s);
   if (!isFinite(n)) return DEFAULT_CONTEXT_BUDGET;
   return Math.max(0, Math.round(n));
+}
+
+// ---------------------------------------------------------------- 检查更新（卡底）
+// 版本号唯一权威：android/app/build.gradle 的 versionName（真机上由 Capacitor App 插件的 getInfo() 报出来）。
+// 浏览器里没有插件 → 回落下面这个常量。版本是只读展示，绝不写进 settings（settings 只放可改的偏好）。
+const APP_VERSION = "0.1.0";
+// 版本清单走 raw.githubusercontent（CORS 放开、无限流），不走 api.github.com：
+// 后者匿名 60 次/小时/IP，且 /releases/latest 会排除 pre-release，我们首个版本就是 pre-release。
+const VERSION_MANIFEST =
+  "https://raw.githubusercontent.com/MeruSu/meruchat/main/webapp/version.json";
+const RELEASES_PAGE = "https://github.com/MeruSu/meruchat/releases";
+
+/** 当前 App 版本：Capacitor App 插件优先（try/catch + await），拿不到回落 APP_VERSION */
+async function currentAppVersion() {
+  try {
+    const cap = typeof window !== "undefined" ? window.Capacitor : null;
+    const app = cap && cap.Plugins ? cap.Plugins.App : null;
+    if (app && typeof app.getInfo === "function") {
+      const info = await app.getInfo();
+      const v = info && info.version ? String(info.version).trim() : "";
+      if (v) return v;
+    }
+  } catch (e) {
+    // 插件缺失 / 桥接异常都算「拿不到」：静默回落常量，不往控制台外抛
+  }
+  return APP_VERSION;
+}
+
+/** "v0.1.10" → [0, 1, 10]：只取前缀数字段（-beta.1 这类后缀不参与比较，避免把 0.2.0-rc 判成 0.2.0.0.1） */
+function versionParts(v) {
+  const s = String(v == null ? "" : v).trim().replace(/^[vV]/, "");
+  const core = s.match(/^\d+(?:\.\d+)*/);
+  if (!core) return [0];
+  return core[0].split(".").map((x) => parseInt(x, 10));
+}
+
+/** 语义化比较：逐位比数字（0.1.10 > 0.1.9），a>b → 1，a<b → -1，相等 → 0 */
+function compareVersions(a, b) {
+  const pa = versionParts(a);
+  const pb = versionParts(b);
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    const x = i < pa.length ? pa[i] : 0;
+    const y = i < pb.length ? pb[i] : 0;
+    if (x > y) return 1;
+    if (x < y) return -1;
+  }
+  return 0;
+}
+
+/** 拉版本清单 → { version: "0.1.1", url }；HTTP 非 2xx / 没有 version 都抛 Error（由调用方展示） */
+async function fetchLatestRelease() {
+  // raw.githubusercontent.com 带 Access-Control-Allow-Origin: *，且没有 API 限流
+  const res = await fetch(VERSION_MANIFEST, { cache: "no-store" });
+  if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "???"));
+  const data = await res.json();
+  const ver = data && data.version ? String(data.version).trim() : "";
+  if (!ver) throw new Error("版本清单里没有 version");
+  const url = data && data.downloadUrl ? String(data.downloadUrl) : RELEASES_PAGE;
+  return { version: ver.replace(/^[vV]/, ""), url: url };
 }
 
 /** 照 styles.html 833-869 行，逐字（壁纸 select 换成 .seg；模型接口接在最后） */
@@ -208,6 +268,27 @@ export default {
 
     // 说明文字接在可滚区末尾（属于设置内容，不另起一块）
     this.bodyEl.appendChild(el("div", null, "保存后立刻生效；聊天卡片里不再单独配置模型。"));
+
+    // 检查更新（卡底，只读展示 + 一次网络检查）
+    const upd = this.buildUpdateSection();
+    this.updateBox = upd.box;
+    this.updateVerEl = upd.verEl;
+    this.updateBtn = upd.checkBtn;
+    this.downloadBtn = upd.dlBtn;
+    this.updateStatusEl = upd.statusEl;
+    upd.checkBtn.addEventListener("click", () => this.checkUpdate());
+    upd.dlBtn.addEventListener("click", () => {
+      // Capacitor 里 window.open 交给系统浏览器
+      window.open(this.downloadUrl || RELEASES_PAGE, "_blank");
+    });
+    this.bodyEl.appendChild(upd.box);
+    // 真机 getInfo() 是异步的：先按常量渲染，拿到真版本再改文案（拿不到就保持常量）
+    currentAppVersion()
+      .then((v) => {
+        if (this.updateVerEl) this.updateVerEl.textContent = "当前版本 " + v;
+      })
+      .catch(() => {});
+
     back.addEventListener("click", () => ctx.router.back());
 
     root.appendChild(wrap);
@@ -228,6 +309,12 @@ export default {
     this.disposers = [];
     this.root = null;
     this.bodyEl = null;
+    // 检查更新的引用一起放掉：await 回来时元素已脱离，写文案也不该再碰（见 checkUpdate 的 finally）
+    this.updateBox = null;
+    this.updateVerEl = null;
+    this.updateBtn = null;
+    this.downloadBtn = null;
+    this.updateStatusEl = null;
   },
 
   // ================================================================ 填值 / 高亮
@@ -338,5 +425,78 @@ export default {
     events.emit("settings:changed", clean);
     events.emit("settings:applied", next);
     events.emit("toast", { text: "设置已保存" });
+  },
+
+  // ================================================================ 检查更新
+  /** 卡底区块骨架：标题 / 版本 + 两个按钮一行 / 三态提示 / 小字说明 */
+  buildUpdateSection() {
+    const box = el("div", "update-box");
+    box.appendChild(el("div", "section-title", "检查更新"));
+
+    const row = el("div", "update-row");
+    const verEl = el("span", "update-ver", "当前版本 " + APP_VERSION);
+    const checkBtn = el("button", "btn update-btn", "检查更新");
+    checkBtn.type = "button";
+    const dlBtn = el("button", "btn update-dl-btn", "下载");
+    dlBtn.type = "button";
+    dlBtn.hidden = true; // 只有发现新版本才出现
+    row.appendChild(verEl);
+    row.appendChild(checkBtn);
+    row.appendChild(dlBtn);
+    box.appendChild(row);
+
+    const statusEl = el("div", "update-status");
+    statusEl.hidden = true;
+    box.appendChild(statusEl);
+    box.appendChild(el("div", "update-note", "更新需要重新安装 APK"));
+    return { box: box, verEl: verEl, checkBtn: checkBtn, dlBtn: dlBtn, statusEl: statusEl };
+  },
+
+  /** 三态提示（同一行）：new / ok / fail；kind 为空则清空并隐藏 */
+  setUpdateStatus(text, kind) {
+    const e = this.updateStatusEl;
+    if (!e) return;
+    e.textContent = text || "";
+    e.classList.remove("update-status-new");
+    e.classList.remove("update-status-ok");
+    e.classList.remove("update-status-fail");
+    if (kind) e.classList.add(kind);
+    e.hidden = !text;
+  },
+
+  /** 下载按钮：有 url 才显示 */
+  setDownloadUrl(url) {
+    this.downloadUrl = url || "";
+    const btn = this.downloadBtn;
+    if (!btn) return;
+    btn.hidden = !this.downloadUrl;
+  },
+
+  /** 点「检查更新」：禁用 → 取版本 → 拉 release → 语义化比较 → finally 复原 */
+  async checkUpdate() {
+    const btn = this.updateBtn;
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "检查中…";
+    this.setDownloadUrl(""); // 上一轮的下载按钮先收掉
+    this.setUpdateStatus("", "");
+    try {
+      const cur = await currentAppVersion();
+      if (this.updateVerEl) this.updateVerEl.textContent = "当前版本 " + cur;
+      const rel = await fetchLatestRelease();
+      if (compareVersions(rel.version, cur) > 0) {
+        this.setUpdateStatus("发现新版本 " + rel.version, "update-status-new");
+        this.setDownloadUrl(rel.url);
+      } else {
+        this.setUpdateStatus("已是最新（" + cur + "）", "update-status-ok");
+      }
+    } catch (err) {
+      // 离线 / 404 / 没有 release 全落到这里：err.message 或 HTTP 状态码
+      this.setUpdateStatus("检查失败：" + errorText(err), "update-status-fail");
+    } finally {
+      // 无论成败都恢复可点（unmount 后 btn 已脱离文档，写属性也无害）
+      btn.disabled = false;
+      btn.textContent = "检查更新";
+    }
   },
 };

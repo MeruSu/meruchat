@@ -4,7 +4,15 @@
      2) @keyframes
      3) 通用动效类（.anim-*）
    各 card-*.css 与 cards.css 只许引用这里，不许自己写数字时长或 @keyframes。
-   骨架由 lead 建，owner = dev-a（见 DEV.md §1）。 */
+   骨架由 lead 建，owner = dev-a（见 DEV.md §1）。
+
+   2026-11-25 掉帧修正（用户反馈「动画有点卡」）：
+   - .fab 的过渡原本（css/card-list.css:30）是 `transform, filter`。filter 不可合成，亮度插值
+     必须每帧重新光栅化按钮，是这一层里唯一真正的逐帧重算；按下反馈实际只有 transform: scale()。
+     本文件是唯一动效层，用 `body .fab` 提一级优先级只留 transform（下方「性能覆盖」段）。
+   - 卡片/页面级 background-color 过渡（整屏重绘）已在 cards.css 的 body/.card 段去掉，
+     .chat-body / .conv-list 的 contain: paint 也在 cards.css 里。
+   - .toast 的过渡是 opacity + transform（本来就是合成属性），没有 box-shadow，不动。 */
 
 :root {
   --dur-1: 120ms;
@@ -107,10 +115,24 @@
 .anim-wall-fade { animation: anim-wall-fade var(--dur-3) var(--ease-out) both; }
 
 /* 会话列表 stagger：前 8 行按 --i 递延（8 × 24ms + 180ms ≈ 372ms < 400ms）。
-   标记类只由 list.js 在「首次渲染」挂一次，之后 reload 不重放（硬规则 4）。 */
+   标记类只由 list.js 在「首次渲染」挂一次，之后 reload 不重放（硬规则 4）。
+   2026-11-25 核查：全站只有这一个逐行 stagger；消息气泡的入场是 .anim-enter 单条挂类，
+   不是遍历列表（chat-direct.js:132 / chat-group.js:211，animationend 后自摘），所以上限仍是 8，
+   不需要再压。别把 .anim-stagger 挪到消息列表上。 */
 .anim-stagger > .conv:nth-child(-n + 8) {
   animation: anim-row-in var(--dur-2) var(--ease-out) both;
   animation-delay: calc(var(--i, 0) * var(--stagger-step));
+}
+
+/* ---------------------------------------------------------------- 性能覆盖（2026-11-25）
+   .fab 的过渡写在 css/card-list.css:30（dev-a 的文件，本次不动）：`transform, filter`。
+   filter 走不通合成路径——brightness() 插值时按钮必须每帧重新光栅化，点按/长按就会看见卡顿；
+   而 style-kit.css:108 的 `.fab:hover { filter: brightness(1.06) }` 在触屏上是「粘住的 hover」，
+   这层亮度渐变本来就没什么用。这里用 `body .fab` 把优先级抬到 .fab 之上，只留 transform
+   （:active 的 scale(0.94) 视觉反馈完整保留）；filter 变成瞬时切换，不再逐帧插值。
+   等 card-list.css:30 自己删掉 filter 后，本块可以整体删除。 */
+body .fab {
+  transition: transform var(--dur-1) var(--ease-out);
 }
 
 /* 全部动效在减少动态偏好下失效：只留 opacity 的极小变化，避免前庭不适 */
