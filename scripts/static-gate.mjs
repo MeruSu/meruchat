@@ -71,7 +71,7 @@ if (!cardsBlock) {
 // ---------------------------------------------------------------- 3. class 覆盖
 console.log("[3] 卡片用到的 class 是否都有 CSS 规则");
 // 视觉基准 style-kit.css（照搬 su/preview/styles.html，禁止修改）也算数：.conv / .sidebar-* /
-// .sw / .seg / .section-title 这些组件样式都在里面。其余六个按卡片划分。
+// .sw / .seg / .section-title 这些组件样式都在里面。其余按卡片划分（末尾两个是共用层与申请页）。
 const CSS_FILES = [
   "css/style-kit.css",
   "css/theme.css",
@@ -82,6 +82,7 @@ const CSS_FILES = [
   "css/card-detail.css",
   "css/card-settings.css",
   "css/components.css",
+  "css/card-request.css",
 ];
 const cssAll = CSS_FILES.filter((p) => existsSync(join(ROOT, p)))
   .map(read)

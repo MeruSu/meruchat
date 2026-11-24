@@ -10,7 +10,9 @@ import { applySettings } from "./core/theme.js";
 import * as api from "./core/api.js";
 import { el } from "./core/util.js";
 
-/** 卡片 id → 卡片类别（决定 CSS 前缀 .card-list / .card-chat / .card-detail / .card-settings） */
+/** 卡片 id → 卡片类别（决定 CSS 前缀 .card-list / .card-chat / .card-detail / .card-settings / .card-request）。
+ *  request-friend 与 request-join 共用 `kind: "request"`：两张申请页只有文案与 request.type 不同，
+ *  样式同属 css/card-request.css（DEV.md §2.7.6）。 */
 const CARDS = {
   list: { module: "./cards/list.js" },
   "chat-direct": { module: "./cards/chat-direct.js", kind: "chat" },
@@ -18,6 +20,8 @@ const CARDS = {
   "detail-direct": { module: "./cards/detail-direct.js", kind: "detail" },
   "detail-group": { module: "./cards/detail-group.js", kind: "detail" },
   settings: { module: "./cards/settings.js" },
+  "request-friend": { module: "./cards/request-friend.js", kind: "request" },
+  "request-join": { module: "./cards/request-join.js", kind: "request" },
 };
 
 const GAP = 12;
@@ -412,6 +416,15 @@ export function createShell(opts = {}) {
     render("route");
   });
 
+  // 夺屏（§2.7.4）：会话可以强行把界面切到自己（或自己所在的群）
+  // take_screen 工具 emit "screen:takeover" { convId, kind } → 收回栈再 push 那张聊天卡。
+  // convId 缺省 = 「我自己所在的那个会话」，那种情况不发事件，所以这里直接忽略。
+  const offTakeover = events.on("screen:takeover", (p) => {
+    if (!p || !p.convId) return;
+    router.reset();
+    router.push(p.kind === "group" ? "chat-group" : "chat-direct", { convId: p.convId });
+  });
+
   // ---------------------------------------------------------------- 数据变更广播
   // 两套命名并存：dev-c 的卡片 emit「conversations:changed」（冒号），
   // dev-b 的卡片 emit「conversations-changed / members-changed / messages-changed」（短横线）。
@@ -531,6 +544,8 @@ export function createShell(opts = {}) {
       window.removeEventListener("orientationchange", onResize);
       if (resizeTimer) clearTimeout(resizeTimer);
       if (toastTimer) clearTimeout(toastTimer);
+      // 夺屏监听（§2.7.4）必须跟着退订，否则壳销毁后事件还会把路由推回去
+      if (typeof offTakeover === "function") offTakeover();
     },
   };
 }

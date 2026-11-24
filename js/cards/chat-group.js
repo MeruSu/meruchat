@@ -543,7 +543,7 @@ const card = {
     return row;
   },
 
-  /** 一条消息 = .row.them / .row.me > .msg-ava + .msg-col(.who-name + .bubble)
+  /** 一条消息 = .row.them / .row.me > .msg-ava + (.msg-failed?) + .msg-col(.who-name + .bubble)
    *  头像两侧对称：对方在气泡左侧、自己在气泡右侧；名字始终在气泡外面、气泡上方。
    *  没有可见正文的（只走过工具调用 / 只有思考）返回 null：不画行、不留空气泡、也不显示工具名。 */
   messageRow(msg) {
@@ -568,7 +568,30 @@ const card = {
       row.appendChild(ava);
       row.appendChild(col);
     }
+    // §2.7.2：只有自己发的失败消息在气泡左侧（= .msg-col 左边）画红感叹号；
+    // AI 的 failed 走原来的文案，不加感叹号。insertBefore(bang, col) 两侧都对：
+    // 自己那侧是 [col, ava] → 变 [bang, col, ava]；对方那侧是 [ava, col] → 变 [ava, bang, col]。
+    if (mine && msg.status === "failed") row.insertBefore(this.failedBang(), col);
     return row;
+  },
+
+  /** 气泡左侧的红感叹号（§2.7.2）：点开去申请页（群聊 request-join / 私聊 request-friend） */
+  failedBang() {
+    const bang = el("button", "msg-failed", "!");
+    bang.type = "button";
+    bang.setAttribute("aria-label", "发送失败，点击重新申请");
+    bang.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const type = this.conv && this.conv.kind === "group" ? "request-join" : "request-friend";
+      if (!this.ctx || !this.ctx.router || typeof this.ctx.router.push !== "function") return;
+      try {
+        this.ctx.router.push(type, { convId: this.convId });
+      } catch (err) {
+        // 申请卡还没注册时不要静默：router.push 对未知卡片是抛错
+        this.showError(errorText(err));
+      }
+    });
+    return bang;
   },
 
   /** 消息头像：与成员墙同一口径（见 paintMemberAva），尺寸/圆角/字号由 card-chat.css 给 */
@@ -672,6 +695,16 @@ const card = {
     const content = this.input ? this.input.value.trim() : "";
     if (!content) return;
 
+    // §2.7.2：发送前先问能不能说话（被踢出群 / 对方把我删了 → 不发请求，落一条失败消息）。
+    // 老 store 没有 canUserSpeak 时一律当能说，不许把发送功能搞死。
+    const store = this.ctx.store;
+    const allowed =
+      typeof store.canUserSpeak === "function" ? await store.canUserSpeak(this.convId) : true;
+    if (!allowed) {
+      if (!this.unmounted) await this.failSend(content);
+      return;
+    }
+
     this.input.value = "";
     this.autosize();
 
@@ -694,6 +727,49 @@ const card = {
     this.appendMessage(userMsg);
 
     await this.runGroupTurn(content);
+  },
+
+  /** §2.7.2：不能说话（被踢出群 / 被删好友）时落一条本地失败消息，一个请求都不发；
+   *  落库后重读消息区，让那条气泡带上红感叹号。seq 走 takeSeq()，与正常发送同一条自增线。 */
+  async failSend(content) {
+    const text = String(content || "").trim();
+    if (!text || !this.convId) return;
+    const failedMsg = {
+      id: uid(),
+      convId: this.convId,
+      memberId: null,
+      role: "user",
+      content: text,
+      ts: now(),
+      seq: this.takeSeq(),
+      status: "failed",
+      failReason: "removed",
+    };
+    try {
+      await this.ctx.store.addMessage(failedMsg);
+    } catch (e) {
+      this.showError("发送失败: " + errorText(e));
+      return;
+    }
+    this.input.value = "";
+    this.autosize();
+    // 卡内缓存与库里对齐（失败标记要整段重画才看得见，不走 appendMessage 的增量通道）
+    let fresh = null;
+    try {
+      fresh = await this.ctx.store.listMessages(this.convId);
+    } catch (e) {
+      /* 读不回来就用手上这条 */
+    }
+    if (this.unmounted) return;
+    // 与 load() 同一个排序口径：单调 seq 优先，老数据没有 seq 时退回 ts
+    this.messages = (fresh && fresh.length ? fresh : this.messages.concat([failedMsg]))
+      .slice()
+      .sort((a, b) => {
+        const sa = typeof a.seq === "number" ? a.seq : Infinity;
+        const sb = typeof b.seq === "number" ? b.seq : Infinity;
+        return sa === sb ? (a.ts || 0) - (b.ts || 0) : sa - sb;
+      });
+    this.renderMessages();
   },
 
   /** 一轮群聊：先算谁接话（planQueue），再按顺序一个个跑 agent 循环。
@@ -735,6 +811,8 @@ const card = {
       getResponder: () => this.currentResponder,
       // 工具执行成功后的当场重绘（不刷新、不切卡）
       onChanged: (info) => this.applyProfileChange(info),
+      // 夺屏：工具发事件、shell 收（工具自己不调 router，避免和 shell 的 reset+push 切两次）
+      emit: (ev, payload) => this.ctx.events.emit(ev, payload),
     });
     const store = this.ctx.store;
     let failures = 0;

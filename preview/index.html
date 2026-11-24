@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>meruchat · 六卡预览</title>
-<!-- 顺序必须与根 index.html 完全一致（css/style-kit.css → … → css/components.css），preview.css 永远排最后 -->
+<title>meruchat · 八卡预览</title>
+<!-- 顺序必须与根 index.html 完全一致（css/style-kit.css → … → css/card-request.css），preview.css 永远排最后 -->
 <link rel="stylesheet" href="../css/style-kit.css" />
 <link rel="stylesheet" href="../css/theme.css" />
 <link rel="stylesheet" href="../css/motion.css" />
@@ -14,12 +14,13 @@
 <link rel="stylesheet" href="../css/card-detail.css" />
 <link rel="stylesheet" href="../css/card-settings.css" />
 <link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/card-request.css" />
 <link rel="stylesheet" href="./preview.css" />
 </head>
 <body data-skin="notion">
 
 <header id="pv-bar">
-  <span id="pv-title">meruchat · 六卡预览</span>
+  <span id="pv-title">meruchat · 八卡预览</span>
   <span id="pv-status">连接中…</span>
   <button id="pv-reset" type="button">重置演示数据</button>
 </header>
@@ -30,6 +31,8 @@
   <div class="pv-frame" data-frame="detail-direct"><div class="pv-card" id="pv-slot-detail-direct"></div></div>
   <div class="pv-frame" data-frame="detail-group"><div class="pv-card" id="pv-slot-detail-group"></div></div>
   <div class="pv-frame" data-frame="settings"><div class="pv-card" id="pv-slot-settings"></div></div>
+  <div class="pv-frame" data-frame="request-friend"><div class="pv-card" id="pv-slot-request-friend"></div></div>
+  <div class="pv-frame" data-frame="request-join"><div class="pv-card" id="pv-slot-request-join"></div></div>
 </div>
 
 <script type="module" src="./main.js"></script>

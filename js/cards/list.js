@@ -205,7 +205,12 @@ export default {
 
   async reloadOnce() {
     const { store } = this.ctx;
-    const convs = await store.listConversations();
+    // §2.7.3：软删除的会话（removedByUser === true）不进列表。
+    // 优先用活会话接口（它自带 pinned 优先 + updatedAt 倒序的排序），
+    // 老 store 没有这个方法时退回 listConversations 再自己过滤。
+    const convs = await (typeof store.listActiveConversations === "function"
+      ? store.listActiveConversations()
+      : store.listConversations().then((l) => (l || []).filter((c) => !c.removedByUser)));
     // 头像底色要跟主题色走：拿一份用户设置（§2.3 resolveAvatarColor）
     this.settings = (await store.getSettings()) || this.ctx.settings || {};
     const [memberLists, msgLists] = await Promise.all([
@@ -222,13 +227,9 @@ export default {
       previews[c.id] = last ? String(last.content || "").replace(/\s+/g, " ").slice(0, 40) : "";
     });
 
-    this.conversations = convs.slice().sort((a, b) => {
-      // 设计稿没有图钉图标，置顶的可见性靠排序保证：pinned 永远在最前
-      const pa = a.pinned ? 1 : 0;
-      const pb = b.pinned ? 1 : 0;
-      if (pa !== pb) return pb - pa;
-      return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
-    });
+    // 排序不再做第二遍：listActiveConversations 就是 listConversations 的过滤版
+    // （pinned 永远在最前、其余按 updatedAt 倒序），这里照原样用
+    this.conversations = convs;
     this.membersOf = membersOf;
     this.previews = previews;
     // 设计稿里始终有一行是选中的（第一页默认选中第一条）；没有活动会话时用第一条兜底

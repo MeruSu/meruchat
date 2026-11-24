@@ -431,16 +431,20 @@ function deleteMemberConfirm(m) {
   var isLast = members.length <= 1;
   busy = true;
   return confirmDialog({
-    title: "删除成员",
+    title: "从群里移除",
     message: isLast
-      ? "「" + (m.name || "该成员") + "」是这个群聊里唯一的成员，删除后群聊将没有可以对话的人。"
-      : "从群聊中移除「" + (m.name || "该成员") + "」？",
+      ? "「" + (m.name || "该成员") + "」是这个群聊里唯一的成员，移出后群里就没有可以对话的人了。只会把他从这个群里移出，他自己的会话还在。"
+      : "从群里移除「" + (m.name || "该成员") + "」？只会把他从这个群里移出，他自己的会话还在。",
     danger: true,
-    okText: "删除"
+    okText: "移除"
   })
     .then(function (ok) {
       if (!ok) return null;
-      return Promise.resolve(ctx.store.deleteMember(m.id)).then(function () {
+      // §2.8：群成员是已有私聊会话的引用，只摘引用；deleteMember 会删身份行（等于把这个 AI 整个删掉），只做老库兜底
+      var drop = typeof ctx.store.removeGroupMember === "function"
+        ? function () { return ctx.store.removeGroupMember(convId, m.id); }
+        : function () { return ctx.store.deleteMember(m.id); };
+      return Promise.resolve(drop()).then(function () {
         members = members.filter(function (x) {
           return x.id !== m.id;
         });

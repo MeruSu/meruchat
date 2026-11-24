@@ -507,15 +507,10 @@ node dev-server.mjs 8915
 |---|---|
 | `http://127.0.0.1:8915/` | 整合版（真 IndexedDB + 真网关），**日常验收主入口** |
 | `http://127.0.0.1:8915/phone.html` | **9:19 手机比例预览**：单文件壳，`aspect-ratio:9/19` + 内嵌 `<iframe src="index.html">`（同源，数据/路由/主题全真），底部实时打印 `9:19 · W×H`。用户要"锁比例看整包"时给这个 |
-| `http://127.0.0.1:8915/preview/?card=list` | 会话列表卡 |
-| `http://127.0.0.1:8915/preview/?card=chat-direct` | 私聊会话卡 |
-| `http://127.0.0.1:8915/preview/?card=chat-group` | 群聊会话卡 |
-| `http://127.0.0.1:8915/preview/?card=detail-direct` | 私聊详情卡 |
-| `http://127.0.0.1:8915/preview/?card=detail-group` | 群聊详情卡 |
-| `http://127.0.0.1:8915/preview/?card=settings` | 全局设置卡 |
-| `http://127.0.0.1:8915/preview/?all=1` | 六张卡整排（看视觉一致性）。`harness.js:51` 认三种写法：查询参数 `all`、路径以 `/all` 或 `/all.html` 结尾；静态服务不兜底返回 index.html，路径写法会 404，**用 `?all=1`** |
+| `http://127.0.0.1:8915/preview/index.html` | **八卡横轨预览**：一屏一行、卡高顶满视口、左右键/滚轮横滑，每张卡都是**真交互**（真 IndexedDB + 真网关，不是假数据） |
 
-预览走 `preview/mock.js` 的假数据（1 私聊 + 1 群聊 + 8 条消息），**不碰 IndexedDB、不联网**。加 `&scenario=empty` 看空态。
+> 预览壳现在只有一个入口 `preview/index.html`，**总是八帧并排**（list / chat-direct / chat-group / detail-direct / detail-group / settings / request-friend / request-join），加载 `preview/main.js`。
+> 早先的 `?card=<id>` 单卡模式与 `?all=1` 已不存在，`preview/harness.js` 与 `preview/mock.js` 是遗留文件、无人加载（2026-11-25 dev-c 发现，此处已更正）。要单看一张卡，直接看横轨里的那一帧。
 
 **只做纯样式对照时**（不跑应用）：`preview/serve.mjs` 起在 8914（Node，也发 `no-store`）；`su/preview/styles.html` 的设计稿对照在 8899。注意 **8914 这个 origin 的 IndexedDB 曾经坏过**（`indexedDB.open` 直接 hang），所以不要在 8914 上验真应用，只用来看卡片。
 
@@ -537,7 +532,7 @@ node dev-server.mjs 8915
 10. **发消息绝不碰 `pinned`**：只调 `store.touchConversation(id)`。置顶只能由用户手动操作。
 11. **`css/theme.css` 里没有任何组件样式**：它全文只有 7 个 `body[data-skin="..."]{--var:...}` 变量块（notion/wa/gpt/claude/tg/imessage/night）。写 `card-*.css` 时**不能假设** `.big-ava` / `.avatar-block` / `.field` / `.section-title` / `.swatches` / `.sw` 已有样式，必须自己从 `styles.html` 364-460 行抄全。（曾经的错误假设：有人在 card-detail.css 注释里写"这些类在 theme.css 里已经是逐字拷贝"，实际没有，导致 `.big-ava` 渲染成 118×23px 的绿色方块、圆角 0。）
 12. **本机浏览器把所有 <15px 字号钳到 15px**：写 12px 的 `.chat-sub` / `.meta` 会算出 15px。这是浏览器最小字号下限，不是 CSS 写错；真机/别的浏览器上是 12px。**不要为此改设计值**。
-13. **预览页每张卡必须是 9:18 竖屏**：`preview/index.html` 的 `.pv-frame{aspect-ratio:9/18}`，单卡模式一张居中，`?all=1` 是三列两行。卡内 `height:100%;overflow-y:auto`，不允许卡片自身撑破外框（撑破过一次，导致三张卡变成 0.38–0.44 的怪比例）。
+13. **预览卡必须严格 9:19，且量的是 `.pv-card` 不是 `.pv-frame`**：现在的几何是 `.pv-frame` 里的 `--pv-card-h: calc(100dvh - 44px - 24px - var(--pv-label-h) - 2px)`、`--pv-card-w: calc(var(--pv-card-h) * 9 / 19)`，`.pv-frame` 高度再加 `--pv-label-h`（12px 卡名带）。**坑**：卡名带只从高度扣、没从宽度扣，量 `.pv-frame` 会得到 0.4737 但量 `.pv-card` 是 0.4897（胖 3.4%）——验收一律量 `.pv-card` 的 `getBoundingClientRect` 宽高比。另外 `.pv-card` 的直接子节点是 `ASIDE.phone-win` / `DIV.chat`，**没有 `.card` 元素**，所以选择器必须写 `.pv-card > *`（写过 `.pv-card > .card` 是死规则）；`.phone-win` 还要单独压住 `style-kit.css:463` 的 `@media (max-width:1100px){ .phone-win{width:320px;height:min(76vh,720px)} }`，否则视口一窄四帧就变成 320px 宽。
 14. **改完 CSS/JS 后量不到新值 = 缓存，不是代码错**：`python -m http.server` 只发 `Last-Modified` 不发 `ETag`，Chromium 走启发式缓存，ES module 和 CSS 都可能不重新拉（`performance.getEntriesByType('resource')` 里 `transferSize: 0` 就是没拉）。**现在 8914 已经换成 `preview/serve.mjs`（Node，发 `cache-control: no-store`）**，起法：`node preview/serve.mjs 8914`。老的 python 服务器留给 8899（styles.html 对照用）。若换成它还在量旧值，先 `ego_navigate` 到 `about:blank` 再回来。
 15. **验收必须看到「实测数字」，不算「看起来对」**：每条视觉要求都要用 `getComputedStyle` / `getBoundingClientRect` 取具体值，写进报告。用户明确驳回过「功能跑通就算通过」。
 16. **`.chat-body` 的 `--body-pad` 百分比以 `.chat` 为分母、`.row` 的 margin 百分比以 `.chat-body` 为分母，两者不可互换**：`padding:… var(--body-pad)` 的 8% 按 `.chat` 内容宽解析（346 → 27.69px），而 `.row{margin-left:8%}` 的 8% 按 `.chat-body` 内容宽解析（290.6 → 23.25px），差 `2·p²·W ≈ 4.4px`，再加卡片 1px 描边。所以 `margin-left:calc(11px - var(--body-pad))` 永远到不了 11px（实测 16.2），写死 `calc(11px - 8%)` 也只能抵掉一个基准。**本项目的头像外移用固定 `-16px`**（`css/card-chat.css` 的 `.row.them` / `.row.me`），27.69 − 16 = 11.69px ≈ 头像宽度 1/3（36/3 = 12）。若将来启用别的皮肤或改 `--body-pad`，这 16px 要跟着重算。
@@ -633,3 +628,136 @@ node dev-server.mjs 8915
 | 2026-11-25 | dev-c | **删掉两张聊天卡的上下文统计行 `.ctx-line`（用户口径：上下文数字不上界面）**：`js/cards/chat-direct.js` 与 `js/cards/chat-group.js` 删 `.ctx-line` DOM 节点、`renderCtxLine()` 方法与 `this.ctxEl`；**保留** `this.contextStats` 与 `getContextStats` 回调（`context_info` 工具依赖它，删了工具只能现查兜底、且会失去「折叠前后同一口径」）。同步删 `css/card-chat.css` 里 `.ctx-line` 的死规则（若有）。上下文数字此后只有两个出口：`context_info` 工具返回值、两张详情卡的「上下文」区块。口径见 §2.6「可见性」与 §2.6.1 末。 |
 | 2026-11-25 | lead | **气泡 / 发送键 / 群聊名字的取色口径定稿（用户三条原话，覆盖此前所有取色描述）**：用户说「私聊和群组的主题色 也应该分别影响他们的发送键」「不同的气泡的颜色 应该被他们所属于的对象的主题色决定，例如当前来自于用户的应该是橙色，而小助应该是粉色的」「群聊里的名称也和会话一个逻辑，应用所属对象的主题色」。落成 §2.3 的**按消息作者分两支**：`msg.role === "user"` → **用户全局色** `resolveAccent(null, settings)`（**传 `null` = 有意不掺会话色**）；`assistant` → `member.accent → conv.accent → settings.accent` 三级。**发送键 `--send-bg` = 本会话色** `resolveAccent(conv, user)`，私聊/群聊各跟自己的会话色（旧口径「发送键跟用户全局主题色走」作废）。两卡落点（具体行号以本节末 dev-b 那行的实测值 + §2.3 正文为准，我这里只给位置）：`chat-direct.js` 的实例方法 `accentOf(msg)` / `renderAccent()`（写卡根 `--accent`、把 `--send-bg` 写成 `convAccent`、按角色 `paintBubble`）/ `messageRow` 的 `paintBubble` / `ensureStreamBubble` 传 `{role:"assistant"}`，私聊原先的自由函数 `accentForMessage` 已删；`chat-group.js` 的自由函数 `accentForMessage(msg, members, settings, conv)` 三处调用、`renderAccent()` 写卡根 `--accent` 与 `--send-bg`、两处建 `who-name`。**群聊名字颜色不对的根因**：`.who-name` 是气泡的**兄弟节点**（`.msg-col > .who-name + .bubble`），`paintBubble()` 写在气泡**自身**上的 `--accent` 进不到兄弟节点，CSS 的 `color: var(--accent)` 只继承到卡片根（会话色）→ 名字必须由 JS 内联 `nameEl.style.color = accent`，`css/card-chat.css` 里 `.row.them .who-name` / `.row.me .who-name` 的 `color` 降级为兜底 `var(--accent, #615d59)`；该文件第 10 段「发送键跟用户的全局主题色走」的注释同步改成「发送键跟本会话的主题色」。 |
 | 2026-11-25 | dev-b | **气泡/发送键/发言人名三条取色口径落地（用户三条原话见 §2.3）**。① **发送键跟本会话色**：两卡删掉本地函数 `resolveSendAccent()`（删后全仓命中 0），`renderAccent()` 里 `--send-bg` 改写成 `resolveAccent(this.conv, user)` —— 私聊 `chat-direct.js:323`（变量名 `convAccent`，`:321` 同一值写 `--accent`）、群聊 `chat-group.js:406`（变量名 `a`，`:405` 同一值写 `--accent`）。② **气泡按「谁发的」取色**：`chat-direct.js` 的 `accentOf(msg)`（`:310-314`）改为 `role==="user" → resolveAccent(null, user)`、否则 `resolveAccent(this.conv, user)`，三个调用点 `renderAccent():331` / `messageRow():441` / `ensureStreamBubble():629`（后者传 `{role:"assistant"}`）；`chat-group.js` 的 `accentForMessage(msg,members,settings,conv)`（`:130-134`）同样改成 `user → resolveAccent(null, settings)`、成员走 `member.accent || resolveAccent(conv, settings)`，调用点 `:414` / `:556` / `:1027`。③ **群聊发言人名内联取色**：`messageRow():556-559` 与 `ensureStreamBubble():1027-1035` 都改成「先取一次 `accent`，再 `nameEl.style.color = accent`」（`:558` / `:1034`），气泡与名字共用同一个值（只取一次，不取两遍），不再靠 CSS 从卡根继承会话色；`css/card-chat.css` 两条 `.who-name` 的 `color` 降级为兜底 `var(--accent, #615d59)`（`:59` / `:84`），注释写明真正颜色由 JS 内联写入（`:78-79`）；发送键那条注释同步改成「跟本会话主题色」（`:106`）。`js/core/**` 一个字节未改（只组合调用既有的 `resolveAccent` / `resolveMemberAccent`）。门禁：两卡 `node --check` exit 0、`probe-shell-list.mjs` 23 passed / 0 failed、`static-gate.mjs` 通过、`C:\Meru\Shared\make-probe.mjs` 16 passed / 0 failed。 |
+| 2026-11-25 | dev-c | **三个集成缺口收口（只改列出的文件）**：① **`emit` 接进两张聊天卡的 `createTools`** —— `js/core/tools/screen.js:87` 拿不到 `emit` 就报 `no_emit`，而两卡只在运行处（`chat-direct.js:601`、`chat-group.js:804`）传了 `store/getSettings/getContextStats/convId/getResponder/onChanged`，`js/shell.js:422` 的 `screen:takeover` 接收端一直是空等。两处各加一行 `emit: (ev, payload) => this.ctx.events.emit(ev, payload)`；**`chat-direct.js:274` / `chat-group.js:366` 的「进栈预演」调用刻意不加**（那里不执行工具，加了只是多一次事件）。② **`scripts/static-gate.mjs` 的 `CSS_FILES` 补 `css/card-request.css`**（放在 `css/components.css` 之后，与两个 `index.html` 的 `<link>` 顺序一致）。第 3 项只扫 `js/shell.js` / `list.js` / `settings.js` 三个文件的字面量 class，`request-friend.js` / `request-join.js` 的 `req-*` 不在扫描源里；补上这个文件后第 1 项（`index.html` 引用都存在）与第 3 项都过。单独跑一遍 `.req-*` 覆盖检查：两张卡共 15 个 class，**只有 `.req-name` 没有规则**（它只是 `.req-title` 里的 `<span>` 落点，靠继承字形，不需要规则）。③ **预览壳从六帧扩到八帧** —— `preview/index.html` 加两个 `.pv-frame`（`request-friend` / `request-join`）、`preview/main.js` 加两个 import + `FRAMES` / `FRAME_IDS` / `CARDS` / `paramsFor()` 四项（好友申请借私聊 `convId`、入群申请借群聊 `convId`），标题与注释里的「六」改「八」。**判断依据**：`preview.css` 的 `#pv-canvas` 本来就是 `display:flex; flex-wrap:nowrap; overflow-x:auto` 的横轨（滚轮竖滑→横滑、左右键翻卡），多两帧只是把轨道拉长，不破坏「一行等宽」的版面，成本也就 2 个 div + 4 处映射，所以加而不是记缺口。实测（`node preview/serve.mjs 8919`）：`#pv-canvas` 8 个 `.pv-frame`、`#pv-err` 空；两张申请页各有唯一 `.req-input`（`rgb(243,243,246)` / radius 12px / 113px 高）、`.req-submit` 96×36 圆角 999px、`.req-title` 文案分别是「向「小满」发送好友申请」「申请加入「设计三人组」」；卡片本身 318.5×672.4 白底圆角 12px，与其余六帧同宽同高。附带发现（未改，属 dev-a 的 §4）：`preview/harness.js` 已无人加载（`grep harness` 只剩它自己的注释与 DEV.md 两行），§4 里「`?card=` 单卡」「`?all=1` 走 harness」两行与现状不符，现在的 `preview/index.html` 只加载 `main.js` 且总是八帧并排。 |
+| 2026-11-25 | lead | **群成员共享账本收尾三修（真库抓到的 bug，不是猜的）**。① **重新进群 sort 撞号**：`joinConversationToGroup` 原来用 `nextSort = refs.length`，踢过人之后人数小于最大 sort，实测群里出现两个 `sort: 2`（小满、林森）。改成 `maxSort = refs.reduce((n,r)=> typeof r.sort==="number" && r.sort>n ? r.sort : n, -1)` + `nextSort = wantSort != null ? wantSort : maxSort + 1`。② **`removeGroupMember` 不写冷却**：它是 UI「从群里移除」的唯一入口，只删引用不写冷却 → 点两下就能把人加回来，3 分钟 cd 形同虚设（违反用户 m09102）。改成直接委托 `kickConversationFromGroup({groupId, convId: row.convId})`，共用同一条写冷却的路径。③ **新增 `normalizeGroupMemberSort(groupId)`**：把某群引用按现有 sort 稳定排序后重编号成 `0..n-1`，幂等（已规整就一行不写），返回改写条数；挂进 `ready()` 链尾（`migrateGroupMembers` 之后、`getSettings` 之前，`dbAll("conversations")` 逐群跑一遍），因为老库的 sort 可能重复、早期「按人数算 sort」的历史数据也带进来过重复。真库实测 `阿奇 1 / 小满 2 / 林森 2` → `阿奇 0 / 小满 1 / 林森 2`（`fixed: 2`），第二次跑 `0`。④ **§4 与坑 13 按现状改写**：`preview/harness.js` 与 `preview/mock.js` 已是遗留文件（`preview/index.html` 只加载 `main.js`、总是八帧并排、真交互），`?card=` / `?all=1` 两种入口已不存在；坑 13 改成「量 `.pv-card` 不是 `.pv-frame`」（`.pv-frame` 0.4737 vs `.pv-card` 0.4897，卡名带只从高度扣）+ `.pv-card > *` 而非 `> .card` + 单独压 `style-kit.css:463` 的 `@media (max-width:1100px)`。门禁全绿：`node --check`（按 `.mjs` 复制再 check）exit 0、`static-gate.mjs` 32 个 js 全合法、`probe-shell-list.mjs` 23 passed / 0 failed、`make-probe.mjs` 16 passed / 0 failed、`sync-www.mjs` ready。 |
+
+## 2.7 会话之间的社交关系（2026-11-25 用户定，冻结）
+
+**概念映射**（用户口语 → 数据），先对齐再写代码：
+
+| 用户说法 | 数据层落地 |
+|---|---|
+| 「会话」 | 一条 `conversations` 记录；私聊自带 1 个成员（那个 AI 的人设），群聊带 N 个 |
+| 「会话进群」 | 把该会话的成员**复制一份**加入目标群（新成员行，`originConvId` 记来源会话），不是引用 |
+| 「把会话踢出群」 | 删掉那个成员行，并写一条 `relations(群id, 被踢会话id)` 冷却 |
+| 「把用户删除 / 踢出群」 | 写 `relations(会话id, "user")`；用户在该会话发消息失败 |
+| 「会话知道 id 就能进群」 | 入群只校验：群存在、冷却已过、不是已在群里 |
+
+**为什么是复制成员而不是引用**：`members` 的 keyPath 是 `id`（全局唯一），一条成员行只能属于一个 `convId`；引用会让同一个人设无法同时出现在两个群。复制时带 `originConvId` / `originMemberId`，被踢时据此通知来源会话。
+
+### 2.7.1 关系表 `relations`（DB v4，新表）
+
+```
+keyPath: ["convId", "peerId"]
+{ convId: string,        // 主体会话（私聊=该会话；群聊=群）
+  peerId: string,        // 对方：另一个会话 id，或常量 USER_PEER = "user"
+  state: "ok" | "removed",
+  until: number,         // 冷却到期时间戳；0 = 不冷却
+  at: number,            // 状态最后一次变化时间
+  byConvId: string }     // 谁做的（用于「谁把我删了」）
+```
+
+- `COOLDOWN_MS = 180000`（**3 分钟**）。踢人、删用户、申请进群、好友申请**全部**走这一个冷却。
+- 冷却判定只认 `state === "removed" && until > Date.now()`。
+- 冷却过了不代表自动恢复，只代表**允许重新申请**。
+
+### 2.7.2 消息失败与红感叹号
+
+- 发送前先问 `store.canUserSpeak(convId)`：该会话有 `relations(convId, "user").state === "removed"` → false。
+- false 时**不发请求**，落一条本地消息 `{ role: "user", status: "failed", failReason: "removed", content }`，UI 在该气泡左侧画一个红色感叹号。
+- 点感叹号 → 打开申请页（私聊 `request-friend` / 群聊 `request-join`），页上**只有一个输入框**；提交后落一条普通消息带 `request` 字段。
+- 申请以**正常消息**的形态出现在对话里（用户原话：「好友申请是以正常的消息弹出来的」）。
+
+`message.request`（可选字段）：
+```
+{ type: "friend" | "join", fromConvId: string, groupId?: string, status: "pending" | "accepted" | "rejected" }
+```
+
+### 2.7.3 软删除（被用户删掉的会话）
+
+- `conversation.removedByUser = true`：**会话列表不显示**，但群里它的成员照常显示、照常发言。
+- 它可以给对方发好友申请（走 2.7.2 的消息形态）。
+- 硬删除仍然是现在的 `deleteConversation()`（级联删成员/消息/备忘/压缩块），两者不是一回事。
+
+### 2.7.4 夺屏
+
+`take_screen({ convId? })` 工具 → `events.emit("screen:takeover", { convId, kind })`；shell 收到后 `router.reset()` + `router.push(chat-direct | chat-group, { convId })`。不给 `convId` 表示「我自己所在的那个会话」。
+
+### 2.7.5 七个新工具（工具总数 6 → 13）
+
+| 工具 | 参数 | 谁可以用 | 行为 |
+|---|---|---|---|
+| `list_conversations` | 无 | 所有会话 | 只读。返回所有活会话（含被软删除的也返回、带 `removedByUser`），每项 `{id, title, kind, memberCount}` |
+| `get_conversation` | `id` | 所有会话 | 只读。返回该会话的 `{id, title, kind, announcement, accent, wallpaper, members:[{id,name,persona}]}`，用来看人设 |
+| `join_group` | `groupId` | 所有会话 | 把自己（当前发言成员所属会话）作为一个成员加入群。冷却中 → `cooldown` 错误带剩余秒数 |
+| `invite_to_group` | `convId`, `groupId?` | 群聊会话 | 把 `convId` 那个会话的成员复制进群（默认当前群）。冷却中 → `cooldown` |
+| `kick_from_group` | `convId` | 群聊会话 | 把该会话在群里的成员行删掉，写冷却。不许踢自己 |
+| `remove_user` | 无 | 所有会话 | 私聊=删好友，群聊=把用户踢出群。写 `relations(convId,"user")` + 冷却 |
+| `take_screen` | `convId?` | 所有会话 | 夺屏（见 2.7.4）|
+
+工具实现统一放 `js/core/tools/social.js`（六个关系类）+ `js/core/tools/screen.js`（夺屏），由 `tools/index.js` 汇总；`executionMode: "sequential"`（都改库）。
+
+### 2.7.6 UI 落点
+
+- 两张聊天卡的气泡：`status === "failed"` 时在气泡左侧加 `.msg-failed`（红色感叹号），点击 → `ctx.router.push("request-friend" | "request-join", {...})`。
+- 两个申请页：`js/cards/request-friend.js`、`js/cards/request-join.js`，**共用** `css/card-request.css` 与同一套 DOM 骨架（一个标题 + 一个 textarea + 一个提交按钮）；差别只有文案与提交时写的 `request.type`。
+- 会话列表 `list.js` 过滤 `removedByUser === true`。
+
+## 2.8 群成员 = 会话引用（共享账本，2026-11-25 用户定，冻结）
+
+用户原话（m09137）：「群聊里的成员a和私聊里的成员a应该共用一个账本」。**这条否掉了 §2.7 里「进群复制一份成员」的做法，以本节为准。**
+
+### 2.8.1 模型
+
+```
+members        一条成员行 = 一个 AI 的身份账本（keyPath "id"，id 全局稳定、永不复用）
+               convId = 它的「归属私聊会话」（kind === "direct"），不再指向群
+group_members  群里挂的引用（keyPath ["groupId","memberConvId"]，索引 by_group）
+               memberConvId = 被引用会话的 id（也就是那条成员行的 convId）
+messages       memberId 仍然指向**成员行 id**，不改成会话 id（老消息一条都不用改）
+```
+
+三条不变式：
+
+1. **一个 AI 只有一行成员记录**。群里的成员是引用，不是副本。群里改名、改人设、改头像 = 改私聊里的同一个 AI，反之亦然。
+2. **群成员的身份字段只有一处真源**：`members` 表那一行（name / persona / avatar / accent / roleTag / model）。群详情页、聊天气泡、成员墙全部读它。
+3. **私聊会话是 AI 的家**。`listConversations` 里它就是一条普通私聊；删除它会连带删掉它的成员行，于是所有引用它的群都少一个成员（数据层跳过缺失引用，不报错）。
+
+`sort` 只存在于群侧（`group_members.sort`），表示该成员在这个群里的发言顺序。身份行自己的 `sort` 不再用于群内排序。
+
+### 2.8.2 数据层 API（`js/core/store.js`）
+
+| 函数 | 语义 |
+|---|---|
+| `listMembers(convId)` | **私聊**：`members` 按 `convId` 索引查（不变）。**群**：读 `group_members` 拿 `memberConvId` 列表，再按 id 取成员行，按 `group_members.sort` 排序后返回。返回对象形状**不变**（`{id, convId, name, persona, avatar, accent, roleTag, model, sort}`），其中 `id` 是成员行 id、`convId` 是它的归属私聊 id。 |
+| `joinConversationToGroup({groupId, convId, sort?})` | **只写一行 `group_members`**，不复制、不改任何身份字段。目标会话必须是 `kind === "direct"` 且有成员行，否则 `not_direct`。已在群里 `already_in_group`；冷却中 `cooldown`。成功后**清掉这对关系的冷却**。 |
+| `inviteConversationToGroup` | 同上的别名。 |
+| `kickConversationFromGroup({groupId, convId})` | **只删 `group_members` 那一行**，身份行与私聊原样保留（踢出群的 AI 回私聊还能正常说话）。写 `relations(groupId, convId, {state:"removed", until})` 冷却 3 分钟。 |
+| `updateMember` / `putMember` / `addMember` | 语义不变，作用于身份行。群侧调用方拿到的成员对象就是身份行，直接改即可。 |
+| `removeGroupMember(groupId, memberId)` | 新增：按成员行 id 删引用（群侧删除成员的唯一入口）。 |
+| `deleteMember(id)` | 保留原义（删身份行），只允许在私聊删除成员时用。 |
+
+### 2.8.3 迁移（v4 → v5）
+
+`DB_VERSION` 4 → **5**，`onupgradeneeded` 建 `group_members`。迁移函数 `migrateGroupMembers(tx)` 在 `migrateMemosToSingle()` 之后跑，幂等：
+
+对每个 `kind === "group"` 的会话，取它现有的成员行（`convId === groupId`）：
+
+1. 找同名直会话：`kind === "direct"` 且 `title === member.name`。有就复用。
+2. 没有就用这条成员行**原样改造**成一个私聊：新建 `conversations` 行（`kind:"direct"`、`title: member.name`、`avatar: member.avatar`、`accent: member.accent`、`wallpaper:null`），把成员行的 `convId` 改成这个新会话 id。**成员行 id 不变**，所以历史消息的 `memberId` 继续有效。
+3. 写 `group_members{groupId, memberConvId: 新会话 id, sort: member.sort}`。
+4. 全部成功才落库；单条失败只 `console.warn` 并跳过，绝不挡住打开库。
+
+迁移后同一个 AI 不会出现两行成员记录；重复跑不产生重复私聊（靠第 1 步同名复用）。
+
+### 2.8.4 UI 口径
+
+- 群详情页「成员」区：每行显示的是**身份行**，改名/人设/头像写回共享账本（写一次两边都变）。多加一行小字「私聊：<会话标题>」作为可追溯线索（纯文本，不做跳转，P1 再做）。
+- 群聊气泡的 `.who-name` 与头像：读身份行。改一次，私聊与所有群同时变。
+- 群「添加成员」：输入或选择一个**已有会话**（`listActiveConversations` 里 `kind === "direct"` 的那些），不是新建 AI。
+- 新建群时的初始成员：先让用户选已有私聊会话；没有可选会话时才自动建一个私聊 + 身份行（保持「一个 AI 一行」）。
+
+### 2.8.5 已废弃的做法（不要再写）
+
+- 进群复制成员行、带 `originConvId` / `originMemberId` 记来源（§2.7 旧版）。这两个字段留在 `normalizeMember` 里只为兼容老库，新代码不许写。
+- 「群里的人设与私聊的人设各自独立」。

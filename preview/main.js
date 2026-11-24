@@ -1,14 +1,14 @@
-// preview/main.js — 预览壳入口（六帧总览，唯一文件，2026-11-25）
+// preview/main.js — 预览壳入口（八帧总览，唯一文件，2026-11-25）
 //
 // 职责只有三件：
-//   1. 造一份 ctx（store / api / events / router / openSheet / prompt / confirm），六帧共用；
-//   2. 把六个卡片分别挂进 preview/index.html 里已有的六个槽位，单帧失败只影响自己；
+//   1. 造一份 ctx（store / api / events / router / openSheet / prompt / confirm），八帧共用；
+//   2. 把八个卡片分别挂进 preview/index.html 里已有的八个槽位，单帧失败只影响自己；
 //   3. 维护顶栏 `#pv-status` 与 `#pv-reset`。
 //
 // 这里**不实现任何业务逻辑**，也不许改用户数据：会话/消息只读。
 // 唯一允许的写入是 ensureDemoData() 种的那份演示群聊（库里已经有群聊就一个字节都不动），
-// 目的是让 chat-group / detail-group 两帧不至于空着；`#pv-reset` 只重建这条演示群聊再重挂六帧。
-// 六帧必须共用同一个 store 实例（createStore() 每次调用都会各自开一个 IDB 连接）。
+// 目的是让 chat-group / detail-group 两帧不至于空着；`#pv-reset` 只重建这条演示群聊再重挂八帧。
+// 八帧必须共用同一个 store 实例（createStore() 每次调用都会各自开一个 IDB 连接）。
 "use strict";
 
 import { createStore } from "../js/core/store.js";
@@ -22,6 +22,8 @@ import chatGroupCard from "../js/cards/chat-group.js";
 import detailDirectCard from "../js/cards/detail-direct.js";
 import detailGroupCard from "../js/cards/detail-group.js";
 import settingsCard from "../js/cards/settings.js";
+import requestFriendCard from "../js/cards/request-friend.js";
+import requestJoinCard from "../js/cards/request-join.js";
 
 /** 槽位映射（写死；槽位由 preview/index.html 提供，本文件不创建任何骨架） */
 const FRAMES = {
@@ -31,9 +33,20 @@ const FRAMES = {
   "detail-direct": "#pv-slot-detail-direct",
   "detail-group": "#pv-slot-detail-group",
   settings: "#pv-slot-settings",
+  "request-friend": "#pv-slot-request-friend",
+  "request-join": "#pv-slot-request-join",
 };
 
-const FRAME_IDS = ["list", "chat-direct", "chat-group", "detail-direct", "detail-group", "settings"];
+const FRAME_IDS = [
+  "list",
+  "chat-direct",
+  "chat-group",
+  "detail-direct",
+  "detail-group",
+  "settings",
+  "request-friend",
+  "request-join",
+];
 
 const CARDS = {
   list: listCard,
@@ -42,6 +55,8 @@ const CARDS = {
   "detail-direct": detailDirectCard,
   "detail-group": detailGroupCard,
   settings: settingsCard,
+  "request-friend": requestFriendCard,
+  "request-join": requestJoinCard,
 };
 
 /** 路由栈只做记录（最多保留最近 20 次），卡片只读 current()/depth() */
@@ -68,7 +83,7 @@ function loadAtoms() {
 const store = createStore();
 const events = createEvents();
 
-/** 六帧共用的 ctx；settings 由 settings:applied 就地替换 */
+/** 八帧共用的 ctx；settings 由 settings:applied 就地替换 */
 const ctx = {
   store,
   api,
@@ -182,7 +197,7 @@ function safeUnmount(frame) {
  * 每帧一把串行锁：卡片是模块级单例（ctx / rootEl / mounted 都在模块作用域里），
  * 同一帧被并发重挂时，后一次的 unmount() 会把单例 ctx 置 null，前一次还卡在 await 里的
  * mount/onEnter 回来就 `Cannot read properties of null (reading 'store')`。
- * 锁只保证同一帧的挂载序列排队，跨帧仍然并行（六帧首屏本来就要一起出来）。
+ * 锁只保证同一帧的挂载序列排队，跨帧仍然并行（八帧首屏本来就要一起出来）。
  * key = 帧 id；存的是「已吞掉错误」的尾巴，保证一次失败不会卡死后续挂载。
  */
 const frameChain = new Map();
@@ -199,7 +214,7 @@ function withFrameLock(id, fn) {
 
 /**
  * 每帧一个 router 视图：push/back/reset 仍打到共享帧路由，只有 current() 返回**这一帧自己的**参数。
- * 卡片全靠 `router.current().params` 与 `ctx.__convId` 认会话，六帧共用一个 router 会让四张会话卡
+ * 卡片全靠 `router.current().params` 与 `ctx.__convId` 认会话，八帧共用一个 router 会让四张会话卡
  * 都拿不到 convId（实测会渲染成「会话不存在」）。
  */
 function routerViewFor(id, params) {
@@ -289,7 +304,7 @@ function remountById(id, params) {
   });
 }
 
-// ================================================================ router（六帧共享替身）
+// ================================================================ router（八帧共享替身）
 const stack = [];
 
 const frameRouter = {
@@ -315,7 +330,7 @@ const frameRouter = {
     });
   },
   back() {
-    // 预览是六帧并列，没有返回栈：不切任何帧，只提示一句
+    // 预览是八帧并列，没有返回栈：不切任何帧，只提示一句
     events.emit("toast", { text: "预览里没有返回栈" });
     return Promise.resolve(false);
   },
@@ -367,6 +382,9 @@ function paramsFor(ids) {
     "detail-direct": ids.direct ? { convId: ids.direct } : {},
     "chat-group": ids.group ? { convId: ids.group } : {},
     "detail-group": ids.group ? { convId: ids.group } : {},
+    // 两张申请页只要一个会话名就能画出来：好友申请借私聊、入群申请借群聊
+    "request-friend": ids.direct ? { convId: ids.direct } : {},
+    "request-join": ids.group ? { convId: ids.group } : {},
   };
 }
 
@@ -398,7 +416,7 @@ const DEMO_MESSAGES = [
 
 /**
  * 首屏缺群聊时种一份最小的演示数据（只有这一处会写库）。
- * 规则：库里已有任何群聊就直接返回，一条字节都不改；创建只发生一次，失败只 warn，不挡六帧挂载。
+ * 规则：库里已有任何群聊就直接返回，一条字节都不改；创建只发生一次，失败只 warn，不挡八帧挂载。
  * @returns {Promise<boolean>} 真的种下去了才 true
  */
 function ensureDemoData() {
@@ -444,7 +462,7 @@ function ensureDemoData() {
 }
 
 /**
- * 重置演示数据：只删「设计三人组 + kind=group」这一条，再种回来，最后重挂六帧。
+ * 重置演示数据：只删「设计三人组 + kind=group」这一条，再种回来，最后重挂八帧。
  * 私聊、设置、备忘一律不碰。注意 store.deleteConversation 在「全库没有置顶」时会把最新一条置顶，
  * 那是 store 自己的行为：删完把除演示群聊外的置顶状态还原回去。
  */
@@ -584,7 +602,7 @@ function scrollCanvasStep(canvas, dir) {
 }
 
 // ================================================================ 横向滑轨
-/** 六帧排成一条横轨：滚轮竖滑→横滑、键盘左右翻卡（滚动条已隐藏，只能靠这两个入口） */
+/** 八帧排成一条横轨：滚轮竖滑→横滑、键盘左右翻卡（滚动条已隐藏，只能靠这两个入口） */
 function bindCanvas() {
   const canvas = document.querySelector("#pv-canvas");
   if (!canvas) {
@@ -649,7 +667,7 @@ function boot() {
   const ready = typeof store.ready === "function" ? store.ready() : Promise.resolve({ settings: {} });
   return Promise.resolve(ready)
     .catch((err) => {
-      console.error("[preview] store.ready() 失败，六帧按空设置启动", err);
+      console.error("[preview] store.ready() 失败，八帧按空设置启动", err);
       return { settings: {} };
     })
     .then((res) => {
@@ -662,7 +680,7 @@ function boot() {
       }
       bindReset();
       bindCanvas();
-      // 先保证有群聊可预览，再挂六帧（种数据失败也照挂，群聊帧自己落空态）
+      // 先保证有群聊可预览，再挂八帧（种数据失败也照挂，群聊帧自己落空态）
       return ensureDemoData().then(() => mountAll());
     })
     .then(() => refreshStatus())

@@ -154,3 +154,29 @@
 .card-chat .send.stop .ico-stop {
   opacity: 1;
 }
+
+/* 15) 失败消息的红感叹号（§2.7.2）：只有自己发的失败消息有，点开弹申请页。
+      行内位置由 JS 决定（插在气泡左边：私聊 row.insertBefore(bang, bubble)；群聊插在 .msg-col 前），
+      这里只管尺寸与配色；align-self:flex-end 让它在气泡底边那一侧。 */
+.card-chat .msg-failed {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  align-self: flex-end;
+  margin-bottom: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: #ff3b30;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.card-chat .row.me .msg-failed {
+  margin-right: 6px;
+}

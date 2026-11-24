@@ -728,7 +728,8 @@ await test("list: mount 后渲染会话行（照搬设计稿结构）", async ()
   await listCard.reload();
 
   const rows = listCard.listEl.querySelectorAll(".conv");
-  assert.equal(rows.length, 2);
+  // §2.8：群成员各有一个「家」私聊会话，所以列表 = 甲 + 乙群 + A 的家 + B 的家 = 4 行
+  assert.equal(rows.length, 4);
   // 置顶的排前面
   assert.equal(rows[0].getAttribute("data-id"), group.conversation.id);
   // 设计稿的行结构：c-ava / c-main(c-name>span + c-preview) + 行尾 c-time
@@ -961,7 +962,13 @@ await test("store: createConversation 对象签名（+ 旧签名兼容）与 add
   assert.equal(g.conversation.kind, "group");
   assert.equal(g.conversation.title, "三人群");
   assert.equal(g.members.length, 2);
-  assert.equal(g.members[0].convId, g.conversation.id);
+  // §2.8 共享账本：群成员的 convId 是它的**归属私聊**，不再是群 id
+  assert.notEqual(g.members[0].convId, g.conversation.id);
+  const home0 = await store.getConversation(g.members[0].convId);
+  assert.ok(home0 && home0.kind === "direct", "群成员的 convId 应指向一个私聊会话");
+  assert.equal(home0.title, "甲"); // 家会话按成员名建
+  // 群里读回来的成员与私聊里那条是同一行（id 相同 → 共享账本）
+  assert.equal((await store.listMembers(home0.id))[0].id, g.members[0].id);
   assert.equal(g.members[0].seq, undefined); // 成员没有 seq
 
   // 只给 kind/title，其余走默认
