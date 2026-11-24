@@ -507,6 +507,9 @@ function countMessages(convs) {
   ).then((counts) => counts.reduce((a, b) => a + b, 0));
 }
 
+/** 状态栏尾巴上的滑轨提示：三条写文案的路径（正常刷新 / 读失败 / 启动失败）都带上，免得提示忽隐忽现 */
+const STATUS_HINT = "  ·  ← 横向滑动 →";
+
 function refreshStatus() {
   const el = document.querySelector("#pv-status");
   if (!el) return Promise.resolve();
@@ -514,12 +517,12 @@ function refreshStatus() {
     .then((convs) => {
       const list = Array.isArray(convs) ? convs : [];
       return countMessages(list).then((m) => {
-        el.textContent = "会话 " + list.length + " · 消息 " + m;
+        el.textContent = "会话 " + list.length + " · 消息 " + m + STATUS_HINT;
       });
     })
     .catch((err) => {
       console.warn("[preview] 状态读取失败", err);
-      el.textContent = "状态读取失败";
+      el.textContent = "状态读取失败" + STATUS_HINT;
     });
 }
 
@@ -566,6 +569,54 @@ on("settings:applied", (s) => {
   scheduleStatus();
 });
 
+/**
+ * 按一张卡的宽度翻卡。
+ * 这里**故意不用平滑滚动**：该浏览器里 smooth 静默无效（实测调用后 scrollLeft 一格都不动，
+ * 换瞬时跳转立刻生效，且与 prefers-reduced-motion / scroll-snap 都无关），所以直接算目标位置后赋值，
+ * 由 `scroll-snap-type: x proximity` 自己在落点处吸附。
+ */
+function scrollCanvasStep(canvas, dir) {
+  const first = canvas.querySelector(".pv-frame");
+  const step = (first ? first.getBoundingClientRect().width : 318) + 12;
+  const max = canvas.scrollWidth - canvas.clientWidth;
+  const target = Math.max(0, Math.min(max, canvas.scrollLeft + (dir > 0 ? step : -step)));
+  canvas.scrollLeft = target; // 直接赋值：smooth 在该浏览器里静默无效（实测 0 位移）
+}
+
+// ================================================================ 横向滑轨
+/** 六帧排成一条横轨：滚轮竖滑→横滑、键盘左右翻卡（滚动条已隐藏，只能靠这两个入口） */
+function bindCanvas() {
+  const canvas = document.querySelector("#pv-canvas");
+  if (!canvas) {
+    console.warn("[preview] 找不到 #pv-canvas");
+    return;
+  }
+
+  // 滚轮纵向增量映射成横向滚动：鼠标用户不必去够底部的横向滚动条（滚动条已隐藏）
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.ctrlKey) return; // 缩放交给浏览器
+      if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; // 已经是横向手势，不拦
+      const step = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY; // 行模式(LINE)换算成像素
+      if (!step) return;
+      e.preventDefault();
+      canvas.scrollLeft += step;
+    },
+    { passive: false }
+  );
+
+  // 键盘左右：焦点在页面、且不在输入框里时，按一张卡的宽度翻
+  document.addEventListener("keydown", (e) => {
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (!canvas.querySelector(".pv-frame")) return;
+    e.preventDefault();
+    scrollCanvasStep(canvas, e.key === "ArrowRight" ? 1 : -1);
+  });
+}
+
 // ================================================================ 按钮
 function bindReset() {
   const btn = document.querySelector("#pv-reset");
@@ -610,6 +661,7 @@ function boot() {
         console.warn("[preview] applySettings 失败", err);
       }
       bindReset();
+      bindCanvas();
       // 先保证有群聊可预览，再挂六帧（种数据失败也照挂，群聊帧自己落空态）
       return ensureDemoData().then(() => mountAll());
     })
@@ -617,7 +669,7 @@ function boot() {
     .catch((err) => {
       console.error("[preview] 启动失败", err);
       const el = document.querySelector("#pv-status");
-      if (el) el.textContent = "状态读取失败";
+      if (el) el.textContent = "状态读取失败" + STATUS_HINT;
     });
 }
 

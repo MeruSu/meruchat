@@ -56,7 +56,7 @@
 .card-chat .row.them .who-name {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent, #615d59);
   margin-bottom: 2px;
 }
 
@@ -75,16 +75,19 @@
   align-items: flex-end;
 }
 
+/* 4b) 真正的名字颜色由 JS 内联写到 .who-name 上（与气泡同一个 accent），这里只是兜底，
+      不准靠 var(--accent) 从卡片根继承——那是会话色，不是这条消息那位成员的色。 */
 /* 7) 自己那侧的发言人名，样式与对方一致 */
 .card-chat .row.me .who-name {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent, #615d59);
   margin-bottom: 2px;
 }
 /* 8) 气泡配色：底色一律读气泡自己那位的 --accent-soft（由 JS 用 theme.deriveTheme 算好写上），
       本文件不做任何颜色混合、也不加描边；--accent 只留给发言人名和头像。
-      群聊按发送者取色、私聊取会话色，取谁的色由卡片决定，CSS 不关心。 */
+      群聊按发送者取色（自己→用户全局色；成员→成员色→会话色→全局色），私聊里自己→用户全局色、
+      小助→会话色；取谁的色由卡片决定，CSS 不关心。 */
 .card-chat .row.me .bubble,
 .card-chat .row.them .bubble {
   background-color: var(--accent-soft, #f6f5f4);
@@ -100,7 +103,7 @@
   border-top-color: var(--accent-soft, #f6f5f4);
 }
 
-/* 10) 发送键跟用户的全局主题色走，不跟会话/成员（--send-bg 由 JS 写在卡片根上） */
+/* 10) 发送键跟**本会话**的主题色走（--send-bg 由 JS 用 resolveAccent(conv, user) 写在卡片根上） */
 .card-chat .send {
   background-color: var(--accent, #e5e5ea);
   background: var(--send-bg, var(--accent, #e5e5ea));

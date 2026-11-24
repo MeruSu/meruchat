@@ -125,18 +125,12 @@ function resolveMemberAvaColor(member, accent) {
   return accent;
 }
 
-/** 发送键只跟用户的全局主题色走，与会话无关 */
-function resolveSendAccent(settings) {
-  const a = settings && settings.accent;
-  return isColor(a) ? a : DEFAULT_ACCENT;
-}
-
-/** 气泡的唯一取色口径：自己的消息用 user.accent，成员的消息用 member.accent（null 跟随用户）。
- *  只写 --accent，不写背景色，由 css/card-chat.css 派生。 */
-function accentForMessage(msg, members, settings) {
-  if (!msg || msg.role === "user") return resolveAccent(null, settings);
+/** 气泡的唯一取色口径：谁发的就用谁的主题色。自己 → 用户全局色；成员 → 成员色 → 会话色 → 全局色。
+ *  只写 --accent / --accent-soft 到气泡与发言人名上，不写背景色，由 css/card-chat.css 派生。 */
+function accentForMessage(msg, members, settings, conv) {
+  if (!msg || msg.role === "user") return resolveAccent(null, settings); // 传 null = 只取用户全局色，不掺会话色
   const member = (members || []).find((m) => m && m.id === msg.memberId);
-  return member ? resolveMemberAccent(member, settings) : resolveAccent(null, settings);
+  return member && member.accent ? String(member.accent) : resolveAccent(conv, settings);
 }
 
 /** 本色 → 三件套。theme.js 的 deriveTheme 是唯一口径；还没落地时按同一套算法就地算：
@@ -281,8 +275,6 @@ const card = {
       '<div id="wallpaper"></div>' +
       '<div id="dim"></div>' +
       '<div class="chat-body" id="chatBody"></div>' +
-      '<div class="ctx-line" hidden style="position:relative;z-index:3;padding:0 12px 4px;font-size:12px;line-height:1.4;' +
-      'text-align:center;color:var(--meta,#8a8a8e)"></div>' +
       '<div class="chat-foot">' +
       '<div class="pill"><textarea class="pill-input" placeholder="输入消息…"></textarea></div>' +
       '<button class="send" type="button" aria-label="发送">' +
@@ -296,7 +288,6 @@ const card = {
     this.wallpaperEl = chat.querySelector("#wallpaper");
     this.dimEl = chat.querySelector("#dim");
     this.bodyEl = chat.querySelector("#chatBody");
-    this.ctxEl = chat.querySelector(".ctx-line");
 
     // 顶栏与私聊卡共用同一个组件，插在消息区之前
     this.mountHead();
@@ -405,13 +396,14 @@ const card = {
     if (this.dimEl) this.dimEl.style.opacity = "0";
   },
 
-  /** 会话/成员的颜色：卡片根的 --accent 给气泡兜底，--send-bg 单独取用户全局主题色。
-   *  两色分离是用户定的口径：换会话/换成员不该换发送键，换全局主题色两处都要跟。 */
+  /** 会话/成员的颜色：卡片根的 --accent 给顶栏/输入条兜底，--send-bg 取**本会话**的主题色（两卡同口径）。
+   *  每个气泡的色由 accentForMessage 按「谁发的」决定，不是卡片根一个色刷到底。 */
   renderAccent() {
     if (!this.root) return;
     const user = this.ctx.settings || {};
-    this.root.style.setProperty("--accent", resolveAccent(this.conv, user));
-    this.root.style.setProperty("--send-bg", resolveSendAccent(user));
+    const a = resolveAccent(this.conv, user);
+    this.root.style.setProperty("--accent", a);
+    this.root.style.setProperty("--send-bg", a);
     this.paintHeadAva();
     // 成员改了自己的颜色（或用户改了全局色）之后，已经画出来的气泡要就地重算
     const bubbles = this.bodyEl ? Array.prototype.slice.call(this.bodyEl.querySelectorAll(".bubble")) : [];
@@ -419,7 +411,7 @@ const card = {
     this.messages.forEach((m) => {
       if (!m || m.status === "streaming") return;
       const b = bubbles[i++];
-      if (b) paintBubble(b, accentForMessage(m, this.members, user));
+      if (b) paintBubble(b, accentForMessage(m, this.members, user, this.conv));
     });
     // 自己那侧头像跟用户全局主题色走，换色后同样就地重画
     if (this.bodyEl) {
@@ -561,9 +553,12 @@ const card = {
     const row = el("div", mine ? "row me" : "row them");
     const name = mine ? selfIdentity().name : this.memberName(msg.memberId);
     const col = el("div", "msg-col");
-    col.appendChild(el("span", "who-name", name));
+    const accent = accentForMessage(msg, this.members, this.ctx.settings || {}, this.conv);
+    const nameEl = el("span", "who-name", name);
+    nameEl.style.color = accent; // 与气泡同一个取色结果，别让 CSS 从卡片根继承会话色
+    col.appendChild(nameEl);
     const bubbleEl = el("div", "bubble", String(msg.content));
-    paintBubble(bubbleEl, accentForMessage(msg, this.members, this.ctx.settings || {}));
+    paintBubble(bubbleEl, accent);
     col.appendChild(bubbleEl);
     const ava = mine ? this.selfAva() : this.msgAva(msg.memberId, name);
     if (mine) {
@@ -947,9 +942,8 @@ const card = {
       now: new Date(),
     });
     // listUnfoldedMessages 已经把折叠过的滤掉了，built.folded 永远是 0；
-    // 底栏要显示的「压缩块 N」是块数，所以自己带上 blocks 数
+    // 「压缩块 N」用的是块数，所以自己带上 blocks 数。统计只留给 context_info 工具，不上界面。
     this.contextStats = Object.assign({}, built, { blocks: (blocks || []).length, tools });
-    this.renderCtxLine();
 
     // 3) 「谁还没回」这几行仍挂在末尾（§2.6 的第 [5] 段尾部），不新增 system 段
     const out = built.messages.slice();
@@ -973,7 +967,8 @@ const card = {
     const kind = String((info && info.kind) || "");
     const targetId = (info && info.memberId) || null;
     const current = this.turn && this.turn.cursor ? this.turn.cursor : null;
-    const mine = !targetId || targetId === current || this.members.length <= 1;
+    // 「是不是我自己」只管成员级改动：会话主题色（accent）是整张卡共用的，跟谁在发言无关，一律重画
+    const mine = kind === "accent" || !targetId || targetId === current || this.members.length <= 1;
 
     // 1) 重读成员与会话
     try {
@@ -991,11 +986,13 @@ const card = {
     }
 
     // 2) 顶栏只在自己的外观/群名变了时重建（重建后 bindHeadMenu 会重新绑手势，见 mountHead）
-    if (mine && (kind === "name" || kind === "look" || kind === "wallpaper")) this.renderHead();
+    //    accent = 会话自己的主题色，它也染顶栏头像，所以同样要重建
+    if (mine && (kind === "name" || kind === "look" || kind === "wallpaper" || kind === "accent")) this.renderHead();
     // 3) 壁纸：look/wallpaper 走唯一的 resolveWallpaper + applyWallpaperLayer（同值不重放）
+    //    换颜色跟壁纸无关，别多做一次壁纸动画
     if (kind === "look" || kind === "wallpaper") this.renderWallpaper();
-    // 4) 头像与气泡底色：改名/换装都要重画（消息头像按成员口径取色）
-    if (kind === "name" || kind === "persona" || kind === "look") {
+    // 4) 头像与气泡底色：改名/换装/换会话色都要重画（消息气泡按成员 → 会话 → 全局三级取色）
+    if (kind === "name" || kind === "persona" || kind === "look" || kind === "accent") {
       this.renderMessages();
       this.renderAccent();
     }
@@ -1003,27 +1000,6 @@ const card = {
     if (this.ctx && this.ctx.events && typeof this.ctx.events.emit === "function") {
       this.ctx.events.emit("profile:changed", { convId: this.convId, memberId: targetId, kind });
     }
-  },
-
-  /** 底栏统计：压缩块 N · 未压缩 M 条 · 约 X.Xk；budget=0 时首段换成「全量直喂」 */
-  renderCtxLine() {
-    if (!this.ctxEl) return;
-    const st = this.contextStats;
-    if (!st) {
-      this.ctxEl.hidden = true;
-      return;
-    }
-    const all = Array.isArray(st.messages) ? st.messages : [];
-    const n = all.filter((m) => m && m.role !== "system").length;
-    const est = Number(st.estimated) || 0;
-    const k = est < 1000 ? String(est) : (est / 1000).toFixed(1) + "k";
-    const blocks = Number(st.blocks != null ? st.blocks : st.folded) || 0;
-    const settings = this.ctx.settings || {};
-    const budget = Number(settings.contextBudget == null ? 8000 : settings.contextBudget) || 0;
-    const live = budget > 0 && settings.contextCompress !== false;
-    this.ctxEl.textContent =
-      (live ? "压缩块 " + blocks + " · 未压缩 " + n + " 条" : "全量直喂 · " + n + " 条") + " · 约 " + k;
-    this.ctxEl.hidden = false;
   },
 
   /** 只更新会话的 updatedAt。置顶与否只听用户的，发消息绝不碰 pinned。 */
@@ -1048,12 +1024,17 @@ const card = {
     const row = el("div", "row them");
     row.appendChild(this.msgAva(member && member.id, name));
     const col = el("div", "msg-col");
-    col.appendChild(el("span", "who-name", name));
-    const bubbleEl = el("div", "bubble");
-    paintBubble(
-      bubbleEl,
-      accentForMessage({ role: "assistant", memberId: member && member.id }, this.members, this.ctx.settings || {})
+    const accent = accentForMessage(
+      { role: "assistant", memberId: member && member.id },
+      this.members,
+      this.ctx.settings || {},
+      this.conv
     );
+    const nameEl = el("span", "who-name", name);
+    nameEl.style.color = accent; // 与气泡同一个取色结果，别让 CSS 从卡片根继承会话色
+    col.appendChild(nameEl);
+    const bubbleEl = el("div", "bubble");
+    paintBubble(bubbleEl, accent);
     const textNode = document.createTextNode(live.full || "");
     bubbleEl.appendChild(textNode);
     col.appendChild(bubbleEl);

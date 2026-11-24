@@ -30,7 +30,7 @@
 | `js/core/tools/web-search.js` | `web_search`（tavily → firecrawl → exa → bing） | dev-a |
 | `js/core/tools/memo.js` | `memo`（单条、无上限、整段覆盖） | dev-a |
 | `js/core/tools/context-info.js` | `context_info`（只读自查上下文长度） | dev-a |
-| `js/core/tools/profile.js` | `set_name` / `set_persona` / `set_look`（改「你自己」= 这一轮发言的成员） | dev-a |
+| `js/core/tools/profile.js` | `set_name` / `set_persona` / `set_look`（改「你自己」= 这一轮发言的成员；`set_look` 还能传 `conversationAccent` 改**会话偏好色**） | dev-a |
 | `js/ui/atoms.js` | `avatar/bubble/menu/confirmDialog/promptDialog` | dev-b |
 | `js/ui/chat-head.js` | 顶栏组件（私聊/群聊共用） | dev-c |
 | `js/ui/conv-menu.js` | 会话动作菜单（私聊/群聊共用，`⋮` 的唯一实现） | dev-c |
@@ -177,10 +177,30 @@ Member = {
 }
 ```
 
-- 群聊里**谁说的消息就用谁的颜色**：气泡色 = `store.resolveMemberAccent(member, user)` = `member.accent || user.accent || DEFAULT_ACCENT`。
-- 群聊会话自身的 `conv.accent` 暂时**不参与渲染**（字段留着）。
-- 默认色是**白**：`DEFAULT_ACCENT = "#ffffff"`，`ACCENT_COLORS` = `["#ffffff","#0075de","#00a884","#7c5cff","#d97757"]`（白 默认 / 蓝 / 绿 / 紫 / 橙）。
-- `resolveAccent(conv, user)` 的兜底同样是白。
+**气泡取色按「这条消息属于谁」分两条支**（2026-11-25 用户定，**覆盖此前所有取色描述**）。用户原话：「私聊和群组的主题色 也应该分别影响他们的发送键」「不同的气泡的颜色 应该被他们所属于的对象的主题色决定，例如当前来自于用户的应该是橙色，而小助应该是粉色的」。
+
+| 这条消息的 `msg.role` | accent 来源 | 理由 |
+|---|---|---|
+| `"user"`（自己发的） | **`settings.accent`**（用户全局色，`resolveAccent(null, settings)`） | **自己的消息用自己的色**，全局唯一，不掺会话色 |
+| `"assistant"`（某个 AI 成员） | **`member.accent` → `conv.accent` → `settings.accent`**（`resolveAccent(conv, settings)`，成员有单独色时优先） | 成员设了色用成员的；没设就跟**这个会话**的色；再没有才跟我的全局色 |
+
+这是**两条不同的支，不是一条单一回落链**：`user` 那支只有全局色一级（刻意传 `null` 跳过 `conv.accent`）；`assistant` 那支才走成员 → 会话 → 全局。
+
+- **发送键 `--send-bg` = 本会话的主题色** `resolveAccent(conv, user)`：私聊与群聊**各自跟自己的会话色**。用户的全局色只管自己出的气泡，不再决定发送键。（旧口径「发送键跟用户的全局主题色走」**作废**；两卡的本地函数 `resolveSendAccent()` 已删，命中为 0。）
+- 实现落点（行号会随改动小幅漂移，写「约」）：
+  - `js/cards/chat-direct.js`（私聊只有一个 AI，成员色没有意义，只有会话这一级）：实例方法 `accentOf(msg)` 约 `:310-314`，按上表分派；`renderAccent()` 约 `:315-331`（约 `:321` 写卡根 `--accent`，约 `:323` 把 `--send-bg` 写成同一个 `convAccent`，约 `:331` 按角色 `paintBubble(b, this.accentOf(m))`）；`messageRow` 的 `paintBubble` 约 `:441`；`ensureStreamBubble` 约 `:629` 传 `{ role: "assistant" }`。
+  - `js/cards/chat-group.js`：自由函数 `accentForMessage(msg, members, settings, conv)` 约 `:130-134`，按 `msg.role` 分派上面两条支，三处调用约 `:414` / `:556` / `:1027`；`renderAccent()` 约 `:399-428` 写卡根 `--accent`（`:405`）与 `--send-bg`（`:406`，同取 `a = resolveAccent(this.conv, user)`）；两处建 `who-name` 约 `:557` / `:1033`，紧接着 `:558` / `:1034` 就是 `nameEl.style.color = accent`。
+  - `applyProfileChange()` 里那条 `const mine = kind === "accent" || …` **保留**（成员改色后就地重画，与本节无关）。
+
+**群聊发言人名 `.who-name` 必须由 JS 内联写色（不能靠 CSS 继承）**（2026-11-25 用户：「群聊里的名称也和会话一个逻辑，应用所属对象的主题色」）：
+
+`.who-name` 是气泡的**兄弟节点**（`.msg-col > .who-name + .bubble`），**不是气泡的子节点**。气泡上的 `--accent` 是 `paintBubble()` 写在**气泡元素自身**上的内联变量，兄弟节点拿不到那个作用域；CSS 里写 `color: var(--accent)` 只会往上继承到**卡片根**（= 会话色），于是名字颜色与它那条气泡对不上 —— **这就是「名字颜色不对」的根因**。
+
+落法：建 `who-name` 时**先建节点、再 `nameEl.style.color = accent`**（accent 取这条消息自己的 accent，与它的气泡同一个值，取一次两边共用，别取两遍）。`css/card-chat.css` 里 `.row.them .who-name` / `.row.me .who-name` 的 `color` 降级成**兜底** `var(--accent, #615d59)`，不是颜色来源。
+
+
+- 默认主题色是**浅灰**：`DEFAULT_ACCENT = "#e5e5ea"`，`ACCENT_COLORS` = `["#e5e5ea","#0075de","#00a884","#7c5cff","#d97757"]`（灰 默认 / 蓝 / 绿 / 紫 / 橙）；白色主题已下线（见 §2.3.1）。
+- `resolveAccent(conv, user)` 与 `resolveMemberAccent(member, user)` 的兜底同样是浅灰 `#e5e5ea`。
 
 **头像颜色跟着主题色走**（用户定）：
 
@@ -208,7 +228,7 @@ resolveAvatarColor(avatar, accent)  // avatar.color || accent || DEFAULT_ACCENT
 
 | 变量 | 含义 | 消费方 |
 |---|---|---|
-| `--accent` | 本色 | 发送键、发言人名、选中态、logo mask、头像底 |
+| `--accent` | 本色 | **由每条消息各自的 accent 决定**（JS 内联写到气泡与发言人名上，见 §2.3）；发送键单独吃 `--send-bg`（= 本会话色）；兜底用途：选中态、logo mask、头像底 |
 | `--accent-soft` | 浅色版 | **气泡底色**（群里按发送者各自的 soft） |
 | `--accent-surface` | 该主题下的「白」 | 卡片底、聊天区底、输入框底 |
 | `--accent-on` | 压在本色上的字色 | 头像首字、按钮文字（深/浅自适应） |
@@ -221,8 +241,8 @@ resolveAvatarColor(avatar, accent)  // avatar.color || accent || DEFAULT_ACCENT
 - 气泡的 `--bubble-shadow`（style-kit 的软影）**保留**，卡片 CSS 不许写 `box-shadow: none` 去抹它。
 
 规则（硬性）：
-1. 解析只有这几个函数，全项目唯一入口：`store.resolveWallpaper(conv, user)` → 三个壁纸值之一；`store.resolveAccent(conv, user)` → 色值；`store.resolveMemberAccent(member, user)` → 成员气泡色；`store.resolveAvatarColor(avatar, accent)` → 头像底色。**任何卡片都不许自己读 `conv.wallpaper || user.defaultWallpaper` 再兜底。**
-2. 落 DOM 也只有三处：壁纸用 `theme.applyWallpaperLayer(el, w)`（只打 `data-wall`，不写内联 background）；颜色用 `theme.deriveTheme()` 一次写四个变量到卡片根；成员级气泡在气泡元素上写 `--accent` + `--accent-soft`。
+1. 解析只有这几个函数，全项目唯一入口：`store.resolveWallpaper(conv, user)` → 三个壁纸值之一；`store.resolveAccent(conv, user)` → 色值（发送键、会话头像、`conversationAccent` 默认项）；`store.resolveMemberAccent(member, user)` → 成员色（**它不含会话色**，`assistant` 支要先试 `member.accent`、再 `conv.accent`、最后才落到它，完整链条见上文「气泡取色按『这条消息属于谁』分两条支」）；`store.resolveAvatarColor(avatar, accent)` → 头像底色。**任何卡片都不许自己读 `conv.wallpaper || user.defaultWallpaper` 再兜底。**
+2. 落 DOM 只有这几处：壁纸用 `theme.applyWallpaperLayer(el, w)`（只打 `data-wall`，不写内联 background）；颜色用 `theme.deriveTheme()` 一次写四个变量到卡片根；**每条消息的气泡**在气泡元素上写 `--accent` + `--accent-soft`；**群聊发言人名**在 `.who-name` 节点上写内联 `style.color`（兄弟节点继承不到气泡的变量，见上文）；**发送键**只吃卡片根的 `--send-bg`（= 本会话色）。
 3. 事件（名字冻结，payload 冻结）：
    - `conv:changed { id }` — 会话的标题/头像/壁纸/颜色/公告 任一变更
    - `wallpaper-changed { convId }`
@@ -355,7 +375,7 @@ Block = { id, conversationId, index, fromSeq, toSeq, count, summary, tokens, cre
 
 **设置项**（`store` 的 settings 里加）：`contextBudget`（默认 8000）、`contextCompress`（默认 true，false 时不折叠）。两处都进设置卡。
 
-**可见性**（最小集，只说数字，不做花活）：聊天卡底栏一行 `压缩块 N · 未压缩 M 条 · 约 X.Xk`；详情卡加「上下文」区块，列出各块的序号 / 覆盖范围 / 摘要首 60 字 / token，点开看全文，底部一个「立即压缩」按钮（调 `store.foldOldest()`）。
+**可见性**（最小集，只说数字，不做花活）：**上下文统计不再上界面** —— 数字只通过 `context_info` 工具返回、以及两张详情卡的「上下文」区块查看，聊天卡底栏不再有 `.ctx-line` 统计行（见 §2.6.1 末）。详情卡加「上下文」区块，列出各块的序号 / 覆盖范围 / 摘要首 60 字 / token，点开看全文，底部一个「立即压缩」按钮（调 `store.foldOldest()`）。
 
 ---
 
@@ -419,6 +439,8 @@ Block = { id, conversationId, index, fromSeq, toSeq, count, summary, tokens, cre
 2. busy 期间顶栏 `.sub` 文本 = `正在输入中…`，结束后回到 `在线` / `N 位成员`（不是 `群聊`）。
 3. 断开网关造一次失败：气泡存在且正文以 `[回复失败: ` 开头。
 4. 流式期间（第一字之前）`.chat-body .row` 不应多出一个空 `.bubble`（`textContent === ""` 的行数 0）。
+
+同理，**聊天卡底部的上下文统计行（`.ctx-line`）也已移除**：界面上除正式输出外只有顶栏状态（`.chat-head .sub`），`.chat-body` 与 `.chat-foot` 之间不再有任何常驻数字行；上下文数字只走 `context_info` 工具与两张详情卡的「上下文」区块。
 
 ---
 
@@ -607,3 +629,7 @@ node dev-server.mjs 8915
 | 2026-11-25 | dev-a | **`profile.js` 落地 + 私聊/群聊镜像口径的实测（承接上面 lead 那条）**：最终 294 行，三个辅助函数 `loadConversation(store, id)`（`store.getConversation` 读不到就返回 `null`，不让工具崩）、`kindOf(conv)`（`"direct"`/`"group"`/`null`）、`isDirect(conv)`（`kindOf !== "group"`；**读不到会话按私聊处理**，老数据没有 `kind`，不镜像会话的话改名等于没改）。`set_name`：私聊 → `updateConversation(convId, {title})` + `updateMember(id, {name, avatar:{...avatar,label:首字}})`；群聊 → 只 `updateMember`，返回文案 `已把你在本群的名字改成「X」（群名不变）`。`set_look`：`avatarColor`/`avatarLabel` 私聊同时写 `conv.avatar`（基于 `conv.avatar` 合并，不整体替换）与 `member.avatar`，群聊只写 `member.avatar`；`wallpaper` 一律 `updateConversation(convId, {wallpaper: v==="default" ? null : v})`。`set_persona` 不碰会话。`onChanged` 的 `kind` 仍是 `"name"|"persona"|"look"|"wallpaper"`，`try/catch` 包住、工具不依赖它。**上下文第 [5] 段**：同一时刻换时区真的换墙上时间 —— `2026-11-25T02:30+08:00` 在 `Asia/Singapore` 得 `2026-11-25 02:30（周三）`、在 `America/New_York` 得 `2026-11-24 13:30（周二）`（用 `Intl.DateTimeFormat.formatToParts` 取数，`Date.getHours()` 只给本机时区、`timeZone` 会被忽略）。工具清单：描述先按行/句末标点取第一句，再按 `TOOL_LINE_MAX=60` 截断加「…」（59 字的描述原样保留、无句号的 80 字描述截成 60+「…」）。自测（`%TEMP%\probe-profile-tools3.mjs`，假 store 记录调用）**43 passed / 0 failed**，覆盖：六段顺序 `规则|你是甲|压缩块|备忘|时间|消息`、`parts` 六键、缺省 `tools` 仍有时间行、`set_name` 私聊两处都写 / 群聊只写成员且群名不变、`set_persona` 整段替换与清空、`set_look` 私聊镜像 `conv.avatar` / 群聊不碰、`default → null`、空参数与非法颜色报 `bad_args`、无 `onChanged` 也能改、无发言人报 `no_responder`、`createTools` 六个且三个 profile 工具 `sequential`。 |
 | 2026-11-25 | lead | **两张详情卡订阅 `profile:changed`（补齐模型改自己后详情页不刷新的缺口）**：`grep profile:changed js/` 原先只有 emit（`chat-direct.js:743` / `chat-group.js:1025`），没有任何订阅者 —— 模型调 `set_name/set_persona/set_look` 后，聊天卡当场变、**停在详情页时看不到变化**。两张卡各加三件：模块级 `var profileOff = null`、`function refreshFromStore()`、`mount()` 里 `profileOff = ctx.events.on("profile:changed", …)`、`unmount()` 里退订。`refreshFromStore()` 的守卫分别用 `!mounted || nameEditor || personaDirty`（私聊：名字编辑中/人格未落盘不重画）与 `!mounted || nameEditor || boardDirty`（群聊：再加公告板未落盘），`convId` 不匹配直接 return，内部走既有 `load()` → `render()`（群聊等价于原 `rerender()` 但先重读库）。真应用实测（8917，space 51）：私聊 detail-direct 停在页面上时调 `set_name("验收小名")` → 详情 `.name-text` 当场变、`conv.title` 同步；`set_persona` → textarea 当场变；`set_look({avatarColor:"#00a884",avatarLabel:"验",wallpaper:"dusk"})` → `.big-ava` `rgb(0,168,132)`/文字「验」、壁纸 select 显示「暮紫」；群聊 detail-group 调 `set_name` 把成员「乙」改成「丙丁」→ 成员墙 `.m-ava` 由「乙」变「丙」（`avatarLabel` 取首字），群名「验收群」不变。验收后已把测试会话改名/头像/人格还原（`persona` 复原为 `DEFAULT_PERSONA`）、验收群删除。门禁：两个文件 `node --check` exit 0、`sync-www.mjs` ready、`static-gate.mjs` 通过（含 28 个 js 模块解析）、`probe-shell-list.mjs` 23 passed / 0 failed。 |
 | 2026-11-25 | dev-c | **工具条 `.tool-line` 与气泡区「正在输入」永久下线（用户 m08249 口径），状态只走顶栏；流式气泡改懒建**：两卡删 `TOOL_LINE_MAX` / `toolCallNames` / `toolLineText` / `showToolNote` 整组，改 `hasVisibleText(msg)`（`content.trim()` 非空才算可见）；`messageRow()` 对无可见正文返回 `null`，`renderMessages()` / `appendMessage()` 判 null 跳过（不画行、不画空气泡、不显示工具名）。顶栏 `.sub` 成为唯一反馈：`subText()` + `setBusy(on)`（私聊 `正在输入中…`/`在线`，群聊 `正在输入中…`/`N 位成员`）。`startStreamBubble()` 改懒建（开流不建 DOM），新增幂等的 `ensureStreamBubble(live)`，首个 `text_delta` 或失败才建行；`AbortError` 时若已建则移除，不留「已停止」空气泡。群聊 `setTyping(member, extra)` 只路由到 `setBusy`，`extra` 用 `void` 丢弃。`css/card-chat.css` 删掉 `.typing` / `.typing-dots` / `.typing-dots .anim-typing` / `.tool-line` 四组共 **33 行**（原 `:155-186`），文件现 153 行、`typing|tool-line` 命中 0。口径与验收写进 `docs/DEV.md` §2.6.1。 |
+| 2026-11-25 | lead | **会话偏好色（用户 m08762「给会话工具选择他的偏好色」）**：`set_look` 加第四个参数 `conversationAccent`（`#rrggbb` 或 `default` → 写 `conv.accent = null`，走 `updateConversation(target,{accent, touch:false})` —— `touch:false` 是因为改外观不该把会话顶到列表最前），成功后发 `profile:changed {kind:"accent"}`。气泡取色链改为**成员 → 会话 → 全局**三级（`chat-group.js:136`）；两张卡的 `applyProfileChange` 都认 `kind === "accent"`（群聊 `:995` 顶栏、`:1001` 气泡与头像；私聊 `:729` 顶栏 + 新增 `renderMessages()`，因为私聊气泡本来就吃 `resolveAccent(this.conv, …)`，不重画消息等于没变）。**群聊的 `mine` 守卫对 `accent` 失效**（`kind === "accent" || !targetId || …`）：会话色是整张卡共用的，跟这一轮谁在发言无关 —— 实测漏掉这一条时 `conv.accent` 变了但顶栏头像仍是用户全局色（工具回调里 `targetId` 是发言人、`turn.cursor` 是 null，`mine` 判 false 直接跳过 `renderHead`）。实测（8917 preview，真网关）：模型真调 `set_look({conversationAccent:"#7c5cff"})` → `conv.accent #7c5cff`、顶栏头像 `rgb(124,92,255)`、气泡 `--accent #7c5cff`、助手回「这个会话的主题色已改成紫色 #7c5cff，气泡底色、头像色和发送键颜色都会跟着变」；群聊里给「小满」设 `#7c5cff` 后只有她那一条变紫、其余仍跟会话色（三级回落成立）。 |
+| 2026-11-25 | dev-c | **删掉两张聊天卡的上下文统计行 `.ctx-line`（用户口径：上下文数字不上界面）**：`js/cards/chat-direct.js` 与 `js/cards/chat-group.js` 删 `.ctx-line` DOM 节点、`renderCtxLine()` 方法与 `this.ctxEl`；**保留** `this.contextStats` 与 `getContextStats` 回调（`context_info` 工具依赖它，删了工具只能现查兜底、且会失去「折叠前后同一口径」）。同步删 `css/card-chat.css` 里 `.ctx-line` 的死规则（若有）。上下文数字此后只有两个出口：`context_info` 工具返回值、两张详情卡的「上下文」区块。口径见 §2.6「可见性」与 §2.6.1 末。 |
+| 2026-11-25 | lead | **气泡 / 发送键 / 群聊名字的取色口径定稿（用户三条原话，覆盖此前所有取色描述）**：用户说「私聊和群组的主题色 也应该分别影响他们的发送键」「不同的气泡的颜色 应该被他们所属于的对象的主题色决定，例如当前来自于用户的应该是橙色，而小助应该是粉色的」「群聊里的名称也和会话一个逻辑，应用所属对象的主题色」。落成 §2.3 的**按消息作者分两支**：`msg.role === "user"` → **用户全局色** `resolveAccent(null, settings)`（**传 `null` = 有意不掺会话色**）；`assistant` → `member.accent → conv.accent → settings.accent` 三级。**发送键 `--send-bg` = 本会话色** `resolveAccent(conv, user)`，私聊/群聊各跟自己的会话色（旧口径「发送键跟用户全局主题色走」作废）。两卡落点（具体行号以本节末 dev-b 那行的实测值 + §2.3 正文为准，我这里只给位置）：`chat-direct.js` 的实例方法 `accentOf(msg)` / `renderAccent()`（写卡根 `--accent`、把 `--send-bg` 写成 `convAccent`、按角色 `paintBubble`）/ `messageRow` 的 `paintBubble` / `ensureStreamBubble` 传 `{role:"assistant"}`，私聊原先的自由函数 `accentForMessage` 已删；`chat-group.js` 的自由函数 `accentForMessage(msg, members, settings, conv)` 三处调用、`renderAccent()` 写卡根 `--accent` 与 `--send-bg`、两处建 `who-name`。**群聊名字颜色不对的根因**：`.who-name` 是气泡的**兄弟节点**（`.msg-col > .who-name + .bubble`），`paintBubble()` 写在气泡**自身**上的 `--accent` 进不到兄弟节点，CSS 的 `color: var(--accent)` 只继承到卡片根（会话色）→ 名字必须由 JS 内联 `nameEl.style.color = accent`，`css/card-chat.css` 里 `.row.them .who-name` / `.row.me .who-name` 的 `color` 降级为兜底 `var(--accent, #615d59)`；该文件第 10 段「发送键跟用户的全局主题色走」的注释同步改成「发送键跟本会话的主题色」。 |
+| 2026-11-25 | dev-b | **气泡/发送键/发言人名三条取色口径落地（用户三条原话见 §2.3）**。① **发送键跟本会话色**：两卡删掉本地函数 `resolveSendAccent()`（删后全仓命中 0），`renderAccent()` 里 `--send-bg` 改写成 `resolveAccent(this.conv, user)` —— 私聊 `chat-direct.js:323`（变量名 `convAccent`，`:321` 同一值写 `--accent`）、群聊 `chat-group.js:406`（变量名 `a`，`:405` 同一值写 `--accent`）。② **气泡按「谁发的」取色**：`chat-direct.js` 的 `accentOf(msg)`（`:310-314`）改为 `role==="user" → resolveAccent(null, user)`、否则 `resolveAccent(this.conv, user)`，三个调用点 `renderAccent():331` / `messageRow():441` / `ensureStreamBubble():629`（后者传 `{role:"assistant"}`）；`chat-group.js` 的 `accentForMessage(msg,members,settings,conv)`（`:130-134`）同样改成 `user → resolveAccent(null, settings)`、成员走 `member.accent || resolveAccent(conv, settings)`，调用点 `:414` / `:556` / `:1027`。③ **群聊发言人名内联取色**：`messageRow():556-559` 与 `ensureStreamBubble():1027-1035` 都改成「先取一次 `accent`，再 `nameEl.style.color = accent`」（`:558` / `:1034`），气泡与名字共用同一个值（只取一次，不取两遍），不再靠 CSS 从卡根继承会话色；`css/card-chat.css` 两条 `.who-name` 的 `color` 降级为兜底 `var(--accent, #615d59)`（`:59` / `:84`），注释写明真正颜色由 JS 内联写入（`:78-79`）；发送键那条注释同步改成「跟本会话主题色」（`:106`）。`js/core/**` 一个字节未改（只组合调用既有的 `resolveAccent` / `resolveMemberAccent`）。门禁：两卡 `node --check` exit 0、`probe-shell-list.mjs` 23 passed / 0 failed、`static-gate.mjs` 通过、`C:\Meru\Shared\make-probe.mjs` 16 passed / 0 failed。 |

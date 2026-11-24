@@ -1,6 +1,5 @@
-/* preview/preview.css — 六卡同屏的版面（只服务 preview/index.html）
-   只写"装卡片的壳"：顶栏 44px + 自适应列数的帧阵，帧锁 9:19 竖屏。
-   列数 / 行数不写死，按视口宽高比分三档：6×1 / 3×2 / 2×3（见文件末尾的 @media）。
+/* preview/preview.css — 六卡预览的版面（只服务 preview/index.html）
+   只写"装卡片的壳"：顶栏 44px + 一条横向滑轨，每帧高度顶满视口、宽度锁 9:19。
    卡片内部的一切（.card / .card-fill / 业务 DOM）全部来自 css/，这里不碰视觉值。
    规则：不加阴影、不加遮罩、不出现可见滚动条。
    必须在根 index.html 的全部 css 之后加载（见 preview/index.html 的 link 顺序）。 */
@@ -19,7 +18,7 @@ body {
   font: 14px/1.5 var(--font, Inter, -apple-system, "Segoe UI", system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden; /* 永不横向滚 */
-  overflow-y: auto; /* 帧高由 min() 压到装得下；真装不下（极窄的窗口）才纵向滚，滚动条仍隐藏 */
+  overflow: hidden; /* 纵向不再滚：舞台自己定高（顶栏以下全高） */
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -88,53 +87,52 @@ body::-webkit-scrollbar {
   background: #efeeec;
 }
 
-/* ---------------------------------------------------------------- 六帧舞台 #pv-canvas
-   列数不写死：由下面 .pv-frame 的 --pv-cols / --pv-rows 决定，媒体查询按"视口宽高比"切档。
-   为什么用宽高比而不是纯宽度断点：竖屏卡的最优列数同时取决于宽和高（同一宽度下窗口越矮，
-   能塞的列越多），只用 max-width 切档会在"宽而矮"的窗口上退回小卡片。
-   flex-wrap + justify-content:center：每行独立居中；六帧在每一档都刚好整除（6/1、3/2、2/3），
-   不会出现半行，但万一将来改成别的帧数，半行也是居中而不是左对齐。 */
+/* ---------------------------------------------------------------- 横向滑轨 #pv-canvas
+   六张卡排成一行，高度各自顶满浏览器上下（视口高减顶栏），宽度按 9:19 反推，
+   超出视口的部分横向滑动查看。scroll-snap 让松手后自动对齐到卡片起点。 */
 #pv-canvas {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center; /* 行内水平居中（不满一行时也居中） */
-  align-content: center; /* 内容不满一屏时竖直居中 */
-  gap: 12px; /* 列间距 / 行间距都是 12px */
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 12px;
   width: 100%;
-  min-height: calc(100dvh - 44px); /* 舞台至少占满顶栏以下的全部高度 */
-  padding: 12px; /* 页面内边距 12px */
+  height: calc(100dvh - 44px); /* 顶栏以下全部高度 */
+  padding: 12px;
   box-sizing: border-box;
-  overflow-x: hidden; /* 永不横向滚 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+#pv-canvas::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
-/* 帧：锁 9:19 竖屏手机，尺寸同时受"高度预算"和"宽度预算"约束，两边都用 min() 取小：
-     --pv-h = min( 按行数平分后的行高上限 , 按列宽反推的高度上限 )
-   前者保证纵向不溢出，后者保证横向不溢出；高度定下来宽度再由 9:19 反推，比例天然精确。
-   --pv-safe: 2px 是防亚像素误差的余量 —— 一旦 6×w + 5×gap + padding 与视口宽严格相等，
-   舍入误差会让最后一帧被挤到下一行（多出一行就纵向溢出）。 */
+/* 帧：高度 = 视口高 - 顶栏 44 - 舞台上下 padding 24 - 顶部卡名带 12 - 2px 亚像素余量；
+   宽度由 9:19 反推，所以卡片本体的比例天然精确。
+   卡名带（12px）加在卡片**之外**，用 padding-top + box-sizing 让内容盒高度正好等于卡片高。 */
 .pv-frame {
-  --pv-cols: 3; /* 每行几张（默认档：3 列 2 行） */
-  --pv-rows: 2; /* 共几行 */
-  --pv-pad: 24px; /* 页面左右/上下内边距之和 */
-  --pv-gap: 12px; /* 帧间距 */
-  --pv-safe: 2px; /* 亚像素安全余量 */
-  --pv-label-h: 12px; /* 顶部卡名带 */
-  --pv-h: min(
-    calc((100dvh - 44px - var(--pv-pad) - var(--pv-gap) * (var(--pv-rows) - 1) - var(--pv-safe)) / var(--pv-rows)),
-    calc((100vw - var(--pv-pad) - var(--pv-gap) * (var(--pv-cols) - 1) - var(--pv-safe)) / var(--pv-cols) * 19 / 9)
-  );
+  --pv-label-h: 12px;
+  --pv-card-h: calc(100dvh - 44px - 24px - var(--pv-label-h) - 2px);
+  --pv-card-w: calc(var(--pv-card-h) * 9 / 19);
   position: relative;
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  width: calc(var(--pv-h) * 9 / 19);
-  height: var(--pv-h);
-  aspect-ratio: 9 / 19; /* 与上面的 width/height 同源，写在这里表明意图 */
-  padding-top: var(--pv-label-h); /* 顶部留出卡名标签的一条 12px 带 */
+  width: var(--pv-card-w);
+  height: calc(var(--pv-card-h) + var(--pv-label-h));
+  padding-top: var(--pv-label-h);
   box-sizing: border-box;
   border-radius: 12px;
   overflow: hidden;
-  background: transparent; /* 标签带露出页面底色，卡片自己是白的 */
+  background: transparent;
+  scroll-snap-align: start;
 }
 
 /* 卡名标签：只用伪元素 + attr(data-frame)，不加额外 DOM */
@@ -169,9 +167,9 @@ body::-webkit-scrollbar {
   background: #ffffff; /* 用户指定：卡片内部纯白 */
 }
 
-/* .card 在 css/cards.css 里是 flex: 1 1 0；这里显式改成 1 1 auto 并给满宽高，
-   父容器多高它就多高，卡片内部再由 .card > .card-fill 撑满。 */
-.pv-card > .card {
+/* 槽里的直接子节点不是 .card —— 实测是 .phone-win.sidebar-left / .chat / .phone-win.sidebar-right，
+   卡片把外壳元素本身挂进槽里。所以对任意直接子节点生效，不能用 .card。 */
+.pv-card > * {
   flex: 1 1 auto;
   width: 100%;
   height: 100%;
@@ -180,29 +178,12 @@ body::-webkit-scrollbar {
   max-height: 100%;
 }
 
-/* ---------------------------------------------------------------- 列数分档（按宽高比，不写死列数）
-   推导（W = 视口宽，H = 视口高；可用宽 A = W-24，可用高 B = H-44-24，帧宽 w，行数 r = ceil(6/cols)）：
-     cols 列的帧宽上限 = min( (A-12*(cols-1)-2)/cols , 高预算反推的宽度 )
-     高预算 = (B-12*(r-1)-2)/r  →  帧宽 = 高预算 * 9/19
-   6 列 1 行 vs 3 列 2 行 的分界：B < (19A - 816)/27，近似即 H/W < 0.70 —— 所以用 aspect-ratio 切档：
-     宽高比 W/H >= 10/7 (1.4286) → 6 列 1 行（矮而宽的窗口）
-     其余                        → 3 列 2 行
-     W/H <= 2/5 (0.4)            → 2 列 3 行（极窄极高，此时 2 列的 3 行才换得到更宽的单帧）
-   4 列 / 5 列被跳过：ceil(6/4) = ceil(6/5) = 2，和 3 列同样占 2 行（行高预算相同），
-   但列宽上限更小 → 单帧永远比 3 列小，只会白留半行空白。 */
-
-/* 矮而宽：6 列 1 行（此时 6 列的单帧最宽） */
-@media (min-aspect-ratio: 10/7) {
-  .pv-frame {
-    --pv-cols: 6;
-    --pv-rows: 1;
-  }
-}
-
-/* 极窄极高：2 列 3 行（三行才容得下六帧，但每帧更宽） */
-@media (max-aspect-ratio: 2/5) {
-  .pv-frame {
-    --pv-cols: 2;
-    --pv-rows: 3;
-  }
+/* style-kit 的 @media (max-width:1100px) 会把 .phone-win 钉成 320px 宽 76vh 高
+   （给三窗试验页横向滚动用的）。cards.css 的 .card > .phone-win 在预览页打不中
+   （父节点是 .pv-card），所以这里补一条同特异性的覆盖。 */
+.pv-card > .phone-win {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
 }

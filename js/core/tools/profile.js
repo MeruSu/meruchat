@@ -197,8 +197,10 @@ export function createSetLookTool({ store, convId, getResponder, onChanged } = {
     name: "set_look",
     description:
       "修改**你自己**（这一轮发言的成员）的外形：头像颜色、头像首字，以及这个会话的聊天背景（壁纸）。" +
-      "不是用户、也不是群里别的成员。三个参数至少给一个；没给的项保持原样。" +
-      "头像颜色用 #rrggbb；壁纸传 default 表示跟随全局默认。",
+      "不是用户、也不是群里别的成员。四个参数至少给一个；没给的项保持原样。" +
+      "头像颜色用 #rrggbb；壁纸传 default 表示跟随全局默认。" +
+      "还能改**这个会话自己的主题色**（conversationAccent）：它决定这个会话的气泡底色、头像色与发送键颜色——" +
+      "会话里某个成员没单独设色时就用它。",
     executionMode: "sequential",
     parameters: {
       type: "object",
@@ -209,6 +211,10 @@ export function createSetLookTool({ store, convId, getResponder, onChanged } = {
           type: "string",
           enum: ["aurora", "forest", "dusk", "default"],
           description: "这个会话的聊天背景：极光 aurora / 深绿 forest / 暮紫 dusk / default = 跟随全局默认",
+        },
+        conversationAccent: {
+          type: "string",
+          description: "这个会话自己的主题色，#rrggbb；传 default = 跟随全局默认",
         },
       },
       required: [],
@@ -221,8 +227,12 @@ export function createSetLookTool({ store, convId, getResponder, onChanged } = {
       const hasColor = a.avatarColor != null && a.avatarColor !== "";
       const hasLabel = a.avatarLabel != null && a.avatarLabel !== "";
       const hasWall = a.wallpaper != null && a.wallpaper !== "";
-      if (!hasColor && !hasLabel && !hasWall) {
-        throw codeError("bad_args", "set_look 至少给一个：avatarColor / avatarLabel / wallpaper");
+      const hasConvAccent = a.conversationAccent != null && a.conversationAccent !== "";
+      if (!hasColor && !hasLabel && !hasWall && !hasConvAccent) {
+        throw codeError(
+          "bad_args",
+          "set_look 至少给一个：avatarColor / avatarLabel / wallpaper / conversationAccent"
+        );
       }
 
       const patch = {};
@@ -230,6 +240,7 @@ export function createSetLookTool({ store, convId, getResponder, onChanged } = {
       let color = null;
       let label = null;
       let wallpaper = null;
+      let convAccent = null;
 
       if (hasColor) {
         const c = String(a.avatarColor).trim();
@@ -279,9 +290,25 @@ export function createSetLookTool({ store, convId, getResponder, onChanged } = {
         done.push(w === "default" ? "聊天背景恢复成跟随全局默认" : "聊天背景改成 " + w);
       }
 
+      if (hasConvAccent) {
+        const raw = String(a.conversationAccent).trim();
+        const isDefault = raw === "default";
+        if (!isDefault && !AVATAR_COLOR_RE.test(raw)) {
+          throw codeError("bad_args", "conversationAccent 要 #rrggbb，或传 default，收到「" + raw + "」");
+        }
+        need(store, "updateConversation");
+        const target = convId || me.convId;
+        if (!target) throw codeError("bad_args", "set_look 改会话主题色需要 convId（当前拿不到会话）");
+        convAccent = isDefault ? null : raw;
+        // touch:false —— 改外观不该把会话顶到列表最上面
+        await store.updateConversation(target, { accent: convAccent, touch: false });
+        notify(onChanged, { memberId: me.id, kind: "accent" });
+        done.push(isDefault ? "会话主题色恢复成跟随全局默认" : "会话主题色改成 " + raw);
+      }
+
       return {
         content: [{ type: "text", text: "已更新：" + done.join("；") }],
-        details: { avatarColor: color, avatarLabel: label, wallpaper },
+        details: { avatarColor: color, avatarLabel: label, wallpaper, conversationAccent: convAccent },
       };
     },
   };
