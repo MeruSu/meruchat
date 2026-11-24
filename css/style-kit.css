@@ -1,0 +1,731 @@
+/* style-kit.css
+ * 来源：C:\Meru\website\su\preview\styles.html <style> 第 8-734 行（用户已验收的样式）
+ * 规则：本文件是【逐行照搬】的副本，禁止改动任何数值。卡片的 DOM 也必须使用同一套 class 名。
+ * 需要覆盖时写在 css/card-*.css 里，且只允许布局外框相关（高度/flex/9:18 适配），不碰视觉值。
+ *//* =============================================================
+   基础重置 + 通用结构（同一套 DOM，只切 :root[data-skin] 变量）
+   ============================================================= */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--font, -apple-system, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif);
+  background: var(--app-bg, #1a1b1e);
+  color: var(--text, #e6e6e6);
+  overflow: hidden;
+}
+:root {
+  /* 侧栏/面板派生色：默认白/灰，各 skin 可用同名变量覆盖 */
+  --panel-bg: #ffffff;
+  --panel-fg: #111b21;
+  --panel-line: #eaeaea;
+  --panel-soft: #f5f6f7;
+  --active-bg: #f5f6f7;
+  --active-fg: #111b21;
+}
+
+/* ---------- 三个并排手机窗口外壳：铺满整个浏览器 ---------- */
+.app {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  width: 100vw;
+  min-height: 100vh;
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.app::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* 每个窗口按比例拉伸铺满：三窗等宽，圆角 12px，各自内部滚动 */
+.phone-win {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: calc(100vh - 16px);
+  max-height: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+  box-shadow: none;
+  border: 1px solid var(--panel-line);
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.phone-win::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* 中窗保留极轻阴影，左右两窗完全无阴影 */
+.center { box-shadow: 0 6px 20px rgba(0,0,0,.12) !important; }
+.sidebar-left, .sidebar-right { box-shadow: none !important; }
+
+/* 所有内部滚动容器隐藏拉动条（内容仍可滚） */
+.conv-list, .sr-scroll, .chat-body {
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.conv-list::-webkit-scrollbar,
+.sr-scroll::-webkit-scrollbar,
+.chat-body::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* ===== 左栏：会话选择（WhatsApp 风） ===== */
+.sidebar-left {
+  position: relative;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+}
+.sidebar-left .sl-top {
+  flex: 0 0 auto;
+  padding: 10px 12px 6px;
+}
+/* 左上角 MeruSu 手写体 logo（mask 上色，跟随主题色） */
+.sidebar-left .sl-settings {
+  padding: 0; margin: 0;
+  background: none; border: none; cursor: pointer;
+  display: inline-flex; align-items: center;
+  opacity: 1;
+}
+.sidebar-left .sl-settings:hover { opacity: .85; }
+.sidebar-left .sl-logo {
+  display: block;
+  width: 132px; height: 33px;
+  background-color: var(--accent, var(--send-bg, #0075de));
+  -webkit-mask: url("assets/merusu-logo.png") center / contain no-repeat;
+  mask: url("assets/merusu-logo.png") center / contain no-repeat;
+  -webkit-mask-size: contain; mask-size: contain;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
+.fab {
+  position: absolute; right: 16px; bottom: 16px; z-index: 6;
+  width: 52px; height: 52px; border-radius: 50%;
+  border: none; cursor: pointer;
+  background: var(--accent, var(--send-bg)); color: #fff;
+  font-size: 26px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,.18);
+}
+.fab:hover { filter: brightness(1.06); }
+.conv-list { flex: 1 1 auto; overflow-y: auto; padding: 4px 0; }
+.conv {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 14px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  user-select: none;
+}
+.conv:hover { background: var(--panel-soft); }
+.conv.active {
+  background: var(--active-bg);
+  color: var(--active-fg);
+  border-left-color: var(--accent, var(--send-bg, #00a884));
+}
+.conv .c-ava {
+  width: 42px; height: 42px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 16px; flex: 0 0 auto;
+}
+.conv .c-main { flex: 1 1 auto; min-width: 0; }
+.conv .c-name { font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.conv .c-time { font-size: 11px; font-weight: 400; opacity: .65; white-space: nowrap; }
+.conv .c-preview {
+  font-size: 12.5px; opacity: .7; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.conv .c-badge {
+  flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--accent, var(--send-bg, #00a884)); color: #fff;
+  font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+}
+.conv .c-dot {
+  flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent, var(--send-bg, #00a884));
+}
+
+/* ===== 中栏：聊天（就是中间那台手机） ===== */
+.center {
+  padding: 0;
+  background: var(--chat-bg);
+}
+.chat {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  overflow: hidden;
+  background: var(--chat-bg, #efeae2);
+  color: var(--text, #111b21);
+  box-shadow: none;
+  border: none;
+  min-height: 0;
+  font-family: var(--font, inherit);
+}
+/* fill=撑满中窗；phone=按画幅比例收窄中窗（宽度固定，高度按比例） */
+.chat.phone {
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* 顶部联系人条 */
+.chat-head {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--head-bg, #008069);
+  color: var(--head-fg, #fff);
+}
+.chat-head .back { font-size: 18px; line-height: 1; opacity: .95; }
+.chat-head .ava {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--ava-bg, #cfe9e2); color: var(--ava-fg, #00695f);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 16px; flex: 0 0 auto;
+}
+.chat-head .who { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.chat-head .who .name { font-weight: 600; font-size: var(--head-name-size, 16px); }
+.chat-head .who .sub { font-size: 12px; opacity: .82; }
+.chat-head .spacer { flex: 1; }
+.chat-head .head-ico { opacity: .9; font-size: 18px; }
+
+/* 消息区（滚动；壁纸层在 .chat 上铺满，这里透明只滚内容） */
+.chat-body {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px var(--body-pad, 7%) ;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap, 2px);
+  background: transparent;
+}
+#wallpaper {
+  position: absolute; inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+#dim {
+  position: absolute; inset: 0;
+  background: #000;
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.chat-body > .row, .chat-body > .divider, .chat-body > .note {
+  position: relative;
+  z-index: 2;
+}
+
+/* 日期胶囊 */
+.divider { align-self: center; margin: 6px 0 4px; }
+.divider span {
+  display: inline-block;
+  background: var(--divider-bg, #fff);
+  color: var(--divider-fg, #54656f);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 7.5px;
+  box-shadow: 0 1px 1px rgba(0,0,0,.06);
+}
+
+/* 消息行 */
+.row { display: flex; width: 100%; margin: 0; }
+.row.them { justify-content: flex-start; }
+.row.me { justify-content: flex-end; }
+.row p { margin: 0; }
+
+.bubble {
+  position: relative;
+  max-width: var(--bubble-maxw, 78%);
+  padding: var(--bubble-pad, 6px 9px);
+  border-radius: var(--bubble-radius, 7.5px);
+  background: var(--bubble-them-bg, #fff);
+  color: var(--bubble-them-fg, #111b21);
+  box-shadow: var(--bubble-shadow, 0 1px .5px rgba(11,20,26,.13));
+  font-size: var(--bubble-fs, 14.5px);
+  line-height: var(--bubble-lh, 1.45);
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+/* 尾巴 */
+.row.them .bubble {
+  border-top-left-radius: var(--tail-radius, 0);
+}
+.row.them .bubble::before {
+  content: "";
+  position: absolute; top: 0; left: -8px;
+  border: 8px solid transparent;
+  border-top-color: var(--bubble-them-bg, #fff);
+  border-right: 0; border-left-width: 8px;
+}
+.row.me .bubble {
+  background: var(--bubble-me-bg, #d9fdd3);
+  color: var(--bubble-me-fg, #111b21);
+  border-top-right-radius: var(--tail-radius, 0);
+}
+.row.me .bubble::before {
+  content: "";
+  position: absolute; top: 0; right: -8px;
+  border: 8px solid transparent;
+  border-top-color: var(--bubble-me-bg, #d9fdd3);
+  border-left: 0; border-right-width: 8px;
+}
+/* 无尾巴风格（如 gpt）可关掉 */
+.no-tail .bubble::before { display: none; }
+.no-tail .bubble { border-radius: var(--bubble-radius, 7.5px) !important; }
+
+/* 引用回复 */
+.quote {
+  border-left: 4px solid var(--quote-border, #00a884);
+  background: var(--quote-bg, rgba(0,0,0,.05));
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin-bottom: 5px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.quote .qname { font-weight: 600; color: var(--quote-name, #008069); font-size: 12.5px; }
+.quote .qtext { color: var(--meta, #667781); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 代码块 */
+.code {
+  position: relative;
+  margin: 6px 0 2px;
+  background: var(--code-bg, rgba(0,0,0,.06));
+  border-radius: 6px;
+  overflow: hidden;
+  border: var(--code-border, none);
+}
+.code pre {
+  margin: 0; padding: 9px 11px;
+  overflow-x: auto;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12.5px; line-height: 1.45;
+  color: var(--code-fg, inherit);
+}
+.code .copy {
+  position: absolute; top: 5px; right: 5px;
+  border: none; cursor: pointer;
+  font-size: 11px; padding: 3px 8px; border-radius: 5px;
+  background: var(--copy-bg, rgba(255,255,255,.85));
+  color: var(--copy-fg, #334);
+}
+.code .copy:hover { filter: brightness(.95); }
+
+/* 输入区 */
+.chat-foot {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 11px;
+  background: var(--foot-bg, #f0f2f5);
+  border-top: var(--foot-border, none);
+}
+.chat-foot .pill {
+  flex: 1;
+  display: flex; align-items: center;
+  background: var(--input-bg, #fff);
+  border-radius: var(--input-radius, 22px);
+  padding: 9px 14px;
+  color: var(--input-fg, #99a3a8);
+  font-size: 14.5px;
+  min-height: 40px;
+}
+.chat-foot .send {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: none; cursor: pointer;
+  background: var(--send-bg, #00a884);
+  color: var(--send-fg, #fff);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex: 0 0 auto;
+}
+
+/* ===== 右栏：设置（酒馆风） ===== */
+.sidebar-right {
+  position: relative;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+}
+/* 左上角返回键（无底色框，只一个 ‹ 箭头） */
+.sr-back {
+  position: absolute; left: 12px; top: 12px; z-index: 5;
+  width: 24px; height: 24px; padding: 0;
+  background: none; border: none; box-shadow: none; border-radius: 0;
+  color: var(--panel-fg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; line-height: 1; cursor: pointer;
+  opacity: .9;
+}
+.sr-back:hover { opacity: .55; }
+.sr-back:hover { filter: brightness(.96); }
+.sr-scroll { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px 24px; }
+.field { margin-bottom: 16px; }
+.field > .lbl {
+  display: block;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: .3px;
+  opacity: .7;
+  margin-bottom: 7px;
+}
+/* 头像居中，宽度 = 窗宽 1/3，正方形 */
+.avatar-block {
+  display: flex; flex-direction: column; align-items: center;
+  padding-top: 30px; margin-bottom: 16px;
+}
+.big-ava {
+  width: 33%; aspect-ratio: 1 / 1; border-radius: 50%;
+  background: var(--ava-bg, linear-gradient(135deg,#7b5cff,#3f8cff));
+  color: var(--ava-fg, #fff);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px; font-weight: 700; flex: 0 0 auto;
+  cursor: pointer;
+}
+/* 名称居中显示（纯文本，无边框背景） */
+.name-center { text-align: center; width: 80%; margin: 0 auto 16px; }
+.name-text { font-size: 17px; font-weight: 600; color: var(--panel-fg); }
+.btn {
+  border: 1px solid var(--panel-line);
+  background: var(--panel-soft);
+  color: var(--panel-fg);
+  font: inherit; font-size: 12.5px;
+  padding: 7px 13px; border-radius: 8px; cursor: pointer;
+}
+.btn:hover { filter: brightness(1.08); }
+.sidebar-right input[type=text],
+.sidebar-right textarea,
+.sidebar-right select {
+  width: 100%;
+  font: inherit; font-size: 13.5px;
+  color: var(--panel-fg);
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+}
+.sidebar-right textarea { resize: vertical; min-height: 92px; line-height: 1.5; }
+.sidebar-right select { cursor: pointer; }
+.sidebar-right input[type=range] { width: 100%; accent-color: var(--send-bg, #00a884); }
+.seg { display: inline-flex; border: 1px solid var(--panel-line); border-radius: 8px; overflow: hidden; width: 100%; }
+/* 主题色圆形色块选择器 */
+.swatches { display: flex; flex-wrap: wrap; gap: 14px; padding-top: 2px; }
+.sw {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit;
+}
+.sw i {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: block; box-sizing: border-box;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06) inset;
+  transition: box-shadow .12s;
+}
+.sw span { font-size: 11px; color: var(--panel-fg); opacity: .65; }
+.sw.active i { border-color: #fff; box-shadow: 0 0 0 2px var(--panel-fg); }
+.sw.active span { opacity: 1; font-weight: 600; }
+.seg button {
+  flex: 1;
+  border: none; background: transparent; color: var(--panel-fg);
+  font: inherit; font-size: 12.5px; padding: 7px 0; cursor: pointer;
+  opacity: .75;
+}
+.seg button.active { background: var(--send-bg, #00a884); color: var(--send-fg, #fff); opacity: 1; }
+.section-title {
+  font-size: 12px; font-weight: 700; letter-spacing: .5px;
+  text-transform: uppercase; opacity: .55;
+  margin: 22px 0 12px; border-top: 1px solid var(--panel-line); padding-top: 14px;
+}
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row .val { min-width: 38px; text-align: right; font-size: 12.5px; opacity: .8; }
+
+/* 设置窗头顶的关闭按钮（小屏隐藏，纯装饰） */
+.btn-close-right { display: inline-flex; }
+
+/* 窄屏：横向滚动看三个窗口，不挤压变形 */
+@media (max-width: 1100px) {
+  .app { justify-content: flex-start; }
+  .phone-win { width: 320px; height: min(76vh, 720px); }
+}
+
+/* =============================================================
+   6 套 skin：全部定义在 body[data-skin="..."] 变量里
+   ============================================================= */
+
+/* ---- N. notion: 参考 notion.com 设计系统（默认基础主题） ---- */
+body[data-skin="notion"] {
+  --font: Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --maxw: 860px;
+  --app-bg: #f6f5f4;
+  --chat-bg: #ffffff;
+  --text: #000000;
+  --head-bg: #ffffff;
+  --head-fg: #000000;
+  --head-name-size: 16px;
+  --ava-bg: #0075de; --ava-fg: #ffffff;
+  --body-pad: 8%;
+  --gap: 8px;
+  --bubble-radius: 8px;
+  --tail-radius: 8px;
+  --bubble-them-bg: #f6f5f4; --bubble-them-fg: #000000;
+  --bubble-me-bg: #e8f2fd; --bubble-me-fg: #0b1b2b;
+  --bubble-maxw: 80%;
+  --bubble-fs: 15px; --bubble-lh: 1.55;
+  --bubble-pad: 9px 13px;
+  --bubble-shadow: 0 0.8px 2.925px rgba(0,0,0,.02), 0 2px 7.8px rgba(0,0,0,.027);
+  --meta: #615d59; --tick: #0075de; --accent: #0075de;
+  --divider-bg: #f6f5f4; --divider-fg: #615d59;
+  --quote-bg: #f6f5f4; --quote-border: #0075de; --quote-name: #0075de;
+  --code-bg: #f6f5f4; --code-fg: #000000; --code-border: 1px solid #e6e6e6;
+  --copy-bg: #ffffff; --copy-fg: #615d59;
+  --foot-bg: #ffffff; --foot-border: 1px solid #e6e6e6;
+  --input-bg: #f6f5f4; --input-fg: #615d59; --input-radius: 8px;
+  --send-bg: #0075de; --send-fg: #ffffff;
+  --frame-radius: 8px; --frame-border: 1px solid #e6e6e6;
+  --panel-bg: #ffffff; --panel-fg: #000000;
+  --panel-line: #e6e6e6; --panel-soft: #f6f5f4;
+  --active-bg: #f6f5f4; --active-fg: #000000;
+}
+body[data-skin="notion"] .chat-head .who .name { letter-spacing: -0.2px; }
+
+/* ---- A. wa: WhatsApp Web 现代 ---- */
+body[data-skin="wa"] {
+  --font: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --maxw: 860px;
+  --app-bg: #fafafa;
+  --chat-bg: #ffffff;
+  --text: #111b21;
+  --head-bg: #008069;
+  --head-fg: #ffffff;
+  --head-name-size: 16px;
+  --ava-bg: #cfe9e2; --ava-fg: #00695f;
+  --body-pad: 7%;
+  --gap: 3px;
+  --bubble-radius: 7.5px;
+  --tail-radius: 0;
+  --bubble-them-bg: #ffffff; --bubble-them-fg: #111b21;
+  --bubble-me-bg: #d9fdd3; --bubble-me-fg: #111b21;
+  --bubble-maxw: 78%;
+  --bubble-fs: 14.5px; --bubble-lh: 1.45;
+  --bubble-pad: 6px 9px 7px;
+  --bubble-shadow: 0 1px .5px rgba(11,20,26,.13);
+  --meta: #667781; --tick: #53bdeb;
+  --divider-bg: #ffffff; --divider-fg: #54656f;
+  --quote-bg: rgba(0,0,0,.05); --quote-border: #00a884; --quote-name: #008069;
+  --code-bg: rgba(0,0,0,.055); --code-fg: #1f2c34; --code-border: none;
+  --copy-bg: rgba(255,255,255,.85); --copy-fg: #334;
+  --foot-bg: #f0f2f5; --foot-border: none;
+  --input-bg: #ffffff; --input-fg: #99a3a8; --input-radius: 22px;
+  --send-bg: #00a884; --send-fg: #ffffff;
+  --frame-radius: 12px; --frame-border: none;
+  --panel-bg: #ffffff; --panel-fg: #111b21;
+  --panel-line: #eaeaea; --panel-soft: #f5f6f7;
+  --active-bg: #f5f6f7; --active-fg: #111b21;
+}
+
+/* ---- B. gpt: ChatGPT 风（极浅、居中阅读栏、无尾巴） ---- */
+body[data-skin="gpt"] {
+  --font: ui-sans-serif, system-ui, "Segoe UI", Inter, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --maxw: 760px;
+  --app-bg: #fafafa;
+  --chat-bg: #ffffff;
+  --text: #0d0d0d;
+  --head-bg: #ffffff;
+  --head-fg: #0d0d0d;
+  --head-name-size: 15px;
+  --ava-bg: #10a37f; --ava-fg: #ffffff;
+  --body-pad: 10%;
+  --gap: 10px;
+  --bubble-radius: 14px;
+  --tail-radius: 14px;
+  --bubble-them-bg: #f4f4f4; --bubble-them-fg: #0d0d0d;
+  --bubble-me-bg: #ececec; --bubble-me-fg: #0d0d0d;
+  --bubble-maxw: 88%;
+  --bubble-fs: 15px; --bubble-lh: 1.6;
+  --bubble-pad: 10px 14px;
+  --bubble-shadow: none;
+  --meta: #8e8e8e; --tick: #10a37f;
+  --divider-bg: #f4f4f4; --divider-fg: #8e8e8e;
+  --quote-bg: #f0f0f0; --quote-border: #10a37f; --quote-name: #10a37f;
+  --code-bg: #0d0d0d; --code-fg: #e6e6e6; --code-border: none;
+  --copy-bg: rgba(255,255,255,.14); --copy-fg: #e6e6e6;
+  --foot-bg: #ffffff; --foot-border: 1px solid #ececec;
+  --input-bg: #ffffff; --input-fg: #8e8e8e; --input-radius: 22px;
+  --send-bg: #10a37f; --send-fg: #ffffff;
+  --frame-radius: 12px; --frame-border: 1px solid #e5e5e5;
+  --panel-bg: #ffffff; --panel-fg: #111b21;
+  --panel-line: #eaeaea; --panel-soft: #f5f6f7;
+  --active-bg: #f5f6f7; --active-fg: #111b21;
+}
+
+/* ---- C. claude: Anthropic 风（暖米色、衬线标题、细边框） ---- */
+body[data-skin="claude"] {
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --maxw: 740px;
+  --app-bg: #fafafa;
+  --chat-bg: #ffffff;
+  --text: #1f1e1b;
+  --head-bg: #f5f4ef;
+  --head-fg: #1f1e1b;
+  --head-name-size: 17px;
+  --ava-bg: #d97757; --ava-fg: #ffffff;
+  --body-pad: 9%;
+  --gap: 12px;
+  --bubble-radius: 12px;
+  --tail-radius: 12px;
+  --bubble-them-bg: #ffffff; --bubble-them-fg: #1f1e1b;
+  --bubble-me-bg: #ecebe4; --bubble-me-fg: #1f1e1b;
+  --bubble-maxw: 82%;
+  --bubble-fs: 15px; --bubble-lh: 1.62;
+  --bubble-pad: 11px 15px;
+  --bubble-shadow: none;
+  --meta: #8b877d; --tick: #d97757;
+  --divider-bg: #ffffff; --divider-fg: #8b877d;
+  --quote-bg: #f0eee6; --quote-border: #d97757; --quote-name: #b45a3c;
+  --code-bg: #2b2a26; --code-fg: #ece9e2; --code-border: none;
+  --copy-bg: rgba(255,255,255,.16); --copy-fg: #ece9e2;
+  --foot-bg: #f5f4ef; --foot-border: 1px solid #e3e0d6;
+  --input-bg: #ffffff; --input-fg: #a7a29a; --input-radius: 12px;
+  --send-bg: #d97757; --send-fg: #ffffff;
+  --frame-radius: 14px; --frame-border: 1px solid #e3e0d6;
+  --panel-bg: #ffffff; --panel-fg: #111b21;
+  --panel-line: #eaeaea; --panel-soft: #f5f6f7;
+  --active-bg: #f5f6f7; --active-fg: #111b21;
+}
+/* claude 头部标题走衬线感 */
+body[data-skin="claude"] .chat-head .who .name {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: .2px;
+}
+
+/* ---- D. tg: Telegram 风（蓝白、圆角更小、紧凑） ---- */
+body[data-skin="tg"] {
+  --font: -apple-system, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --maxw: 800px;
+  --app-bg: #fafafa;
+  --chat-bg: #ffffff;
+  --text: #17212b;
+  --head-bg: #517da2;
+  --head-fg: #ffffff;
+  --head-name-size: 15px;
+  --ava-bg: #6ab3f3; --ava-fg: #ffffff;
+  --body-pad: 6%;
+  --gap: 2px;
+  --bubble-radius: 10px;
+  --tail-radius: 2px;
+  --bubble-them-bg: #ffffff; --bubble-them-fg: #17212b;
+  --bubble-me-bg: #eeffde; --bubble-me-fg: #17212b;
+  --bubble-maxw: 80%;
+  --bubble-fs: 14px; --bubble-lh: 1.4;
+  --bubble-pad: 5px 8px 6px;
+  --bubble-shadow: 0 1px 1px rgba(0,0,0,.08);
+  --meta: #8a97a3; --tick: #64b5f6;
+  --divider-bg: rgba(255,255,255,.85); --divider-fg: #6d7986;
+  --quote-bg: rgba(90,140,200,.12); --quote-border: #5a8cc8; --quote-name: #3a6ea5;
+  --code-bg: rgba(0,0,0,.06); --code-fg: #17212b; --code-border: none;
+  --copy-bg: rgba(255,255,255,.8); --copy-fg: #334;
+  --foot-bg: #ffffff; --foot-border: 1px solid #d6dde2;
+  --input-bg: #f0f3f5; --input-fg: #9aa5ae; --input-radius: 18px;
+  --send-bg: #517da2; --send-fg: #ffffff;
+  --frame-radius: 8px; --frame-border: none;
+  --panel-bg: #ffffff; --panel-fg: #111b21;
+  --panel-line: #eaeaea; --panel-soft: #f5f6f7;
+  --active-bg: #f5f6f7; --active-fg: #111b21;
+}
+
+/* ---- E. imessage: iMessage 风（蓝色渐变自己、灰色对方、大圆角） ---- */
+body[data-skin="imessage"] {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --maxw: 720px;
+  --app-bg: #fafafa;
+  --chat-bg: #ffffff;
+  --text: #000000;
+  --head-bg: rgba(246,246,246,.92);
+  --head-fg: #000000;
+  --head-name-size: 15px;
+  --ava-bg: linear-gradient(135deg,#5ac8fa,#007aff); --ava-fg: #ffffff;
+  --body-pad: 5%;
+  --gap: 4px;
+  --bubble-radius: 18px;
+  --tail-radius: 18px;
+  --bubble-them-bg: #e9e9eb; --bubble-them-fg: #000000;
+  --bubble-me-bg: linear-gradient(135deg, #35c759, #0a84ff); --bubble-me-fg: #ffffff;
+  --bubble-maxw: 76%;
+  --bubble-fs: 15.5px; --bubble-lh: 1.4;
+  --bubble-pad: 9px 14px;
+  --bubble-shadow: none;
+  --meta: #8e8e93; --tick: #0a84ff;
+  --divider-bg: #f2f2f7; --divider-fg: #8e8e93;
+  --quote-bg: rgba(10,132,255,.12); --quote-border: #0a84ff; --quote-name: #0a84ff;
+  --code-bg: rgba(0,0,0,.06); --code-fg: #000; --code-border: none;
+  --copy-bg: rgba(255,255,255,.85); --copy-fg: #334;
+  --foot-bg: #ffffff; --foot-border: 1px solid #ececec;
+  --input-bg: #f2f2f7; --input-fg: #8e8e93; --input-radius: 20px;
+  --send-bg: #0a84ff; --send-fg: #ffffff;
+  --frame-radius: 18px; --frame-border: none;
+  --panel-bg: #ffffff; --panel-fg: #111b21;
+  --panel-line: #eaeaea; --panel-soft: #f5f6f7;
+  --active-bg: #f5f6f7; --active-fg: #111b21;
+}
+/* imessage 自己气泡为渐变色，尾巴用纯色近似 */
+body[data-skin="imessage"] .row.me .bubble::before { border-top-color: #0a84ff; }
+
+/* ---- F. night: 深色高级感（深灰底、紫蓝渐变气泡） ---- */
+body[data-skin="night"] {
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --maxw: 820px;
+  --app-bg: #0e1013;
+  --chat-bg: #14161a;
+  --text: #e7e9ee;
+  --head-bg: #1c1f26;
+  --head-fg: #e7e9ee;
+  --head-name-size: 16px;
+  --ava-bg: linear-gradient(135deg,#7b5cff,#3f8cff); --ava-fg: #ffffff;
+  --body-pad: 7%;
+  --gap: 6px;
+  --bubble-radius: 12px;
+  --tail-radius: 2px;
+  --bubble-them-bg: #23262e; --bubble-them-fg: #e7e9ee;
+  --bubble-me-bg: linear-gradient(135deg, #6a4cff, #2b6bff); --bubble-me-fg: #ffffff;
+  --bubble-maxw: 78%;
+  --bubble-fs: 14.5px; --bubble-lh: 1.5;
+  --bubble-pad: 8px 12px;
+  --bubble-shadow: 0 2px 8px rgba(0,0,0,.35);
+  --meta: #9aa0ad; --tick: #7fb2ff;
+  --divider-bg: #23262e; --divider-fg: #9aa0ad;
+  --quote-bg: rgba(123,92,255,.16); --quote-border: #7b5cff; --quote-name: #9d86ff;
+  --code-bg: rgba(0,0,0,.4); --code-fg: #d6dcff; --code-border: 1px solid #2f3547;
+  --copy-bg: rgba(255,255,255,.12); --copy-fg: #d6dcff;
+  --foot-bg: #1c1f26; --foot-border: 1px solid #2a2e37;
+  --input-bg: #23262e; --input-fg: #8b90a0; --input-radius: 20px;
+  --send-bg: linear-gradient(135deg, #6a4cff, #2b6bff); --send-fg: #ffffff;
+  --frame-radius: 16px; --frame-border: 1px solid #272b33;
+  --panel-bg: #17191e; --panel-fg: #e7e9ee;
+  --panel-line: #2a2e37; --panel-soft: rgba(255,255,255,.05);
+  --active-bg: #232633; --active-fg: #e7e9ee;
+}
+body[data-skin="night"] .row.me .bubble::before { border-top-color: #6a4cff; }

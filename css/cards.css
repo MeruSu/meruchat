@@ -1,0 +1,226 @@
+/* css/cards.css — 壳布局（宽度 >= 高度 时并排两张，否则单张全屏）
+   只管壳：页面底色、卡片容器的 flex/gap/圆角/边框、卡片内部滚动、空态卡、错误卡、
+   窄屏全局返回按钮。任何一张卡自己的业务样式都不在这里：
+     会话列表 → card-list.css，聊天 → card-chat.css，详情 → card-detail.css，设置 → card-settings.css
+   设计基准：C:\Meru\website\su\preview\styles.html（.app / .phone-win 两段）。 */
+
+/* ---------------------------------------------------------------- 页面 */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden; /* 壳自身不滚，滚动只发生在卡片内部 */
+}
+
+body {
+  background: var(--app-bg, #f6f5f4);
+  color: var(--text, #000000);
+  font-family: var(--font, Inter, -apple-system, "Segoe UI", system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------- 卡片容器（对应 styles.html 的 .app） */
+.cards {
+  --cards-gap: 12px;
+  --cards-pad: 8px;
+  position: relative; /* 窄屏全局返回按钮的定位基准 */
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--cards-gap);
+  width: 100%;
+  height: 100dvh;
+  padding: var(--cards-pad);
+  box-sizing: border-box;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.cards::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 窄屏：单卡全屏铺满（仍保留 8px 外边距，卡片保持圆角可见） */
+.cards.cards-narrow {
+  flex-flow: column nowrap;
+}
+
+/* ---------------------------------------------------------------- 卡片外壳（对应 styles.html 的 .phone-win） */
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  background: var(--panel-bg, #ffffff); /* 用户明确要求：卡片纯白 */
+  color: var(--panel-fg, #000000);
+  border: 1px solid var(--panel-line, #e6e6e6);
+  border-radius: 12px;
+  overflow: hidden; /* 卡片内部独立滚动 */
+  box-shadow: none; /* 用户明确要求：不要阴影 */
+}
+
+/* 卡片内所有滚动容器统一隐藏滚动条（内容仍可滚） */
+.card * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.card *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* 卡片内容铺满：卡片里第一个直接子元素（卡片自建的根容器）撑满剩余高度 */
+.card > .card-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 抵消 style-kit.css:463-466 的窄屏规则。
+   那条 @media (max-width:1100px) { .phone-win { width:320px } } 是给三窗试验页
+   横向滚动用的；卡片里没有「三窗并排」，卡片多大栏就得多大，否则卡片右侧留白
+   （实测视口 1048 时 .card-list 510px、.sidebar-left 只有 320px，右侧空 190px）。
+   只改宽高，不动 style-kit 本体。 */
+.card > .phone-win {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------------------------------------------------------------- 空态卡（宽屏右槽占位） */
+.card.card-empty {
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-soft, #f6f5f4);
+  border-style: dashed;
+}
+
+.card-empty-tip {
+  color: var(--panel-fg, #000000);
+  opacity: 0.45;
+  font-size: 14px;
+  padding: 0 24px;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- 错误态 */
+.card-error {
+  margin: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #f3c9c9;
+  background: #fdf3f3;
+  color: #b3261e;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* 窄屏返回键：一律由卡片自带的 ‹ 承担（用户 2026-11-24 否掉了壳的白色圆钮，
+   见 js/shell.js 的 syncBackButton()）。壳不再渲染 .shell-back，这里也不再需要
+   「有全局返回时把卡片返回键藏起来」那套让位规则。 */
+
+/* ---------------------------------------------------------------- 动效引用
+   @keyframes 与时长 token 全在 css/motion.css（唯一动效层，硬规则）。
+   这里只做「把类挂到壳的元素上」和 reference token，不写任何数字时长。 */
+
+/* 卡片进场：窄屏 push 带 24px 位移，宽屏只淡入（见 shell.js mountInto） */
+.card.anim-card-push,
+.card.anim-card-fade {
+  will-change: transform, opacity;
+}
+
+/* 首屏：.cards 整体淡入，防白闪 */
+.cards.anim-cards-in {
+  animation: anim-cards-in var(--dur-3) var(--ease-out) both;
+}
+
+/* 壁纸层换图：新壁纸从透明淡入（theme.js 挂 data-wall 后由卡片加 .anim-wall-fade） */
+#wallpaper.anim-wall-fade {
+  animation: anim-wall-fade var(--dur-3) var(--ease-out) both;
+}
+
+/* 主题色 / 壁纸切换：吃 --accent* 的元素做颜色过渡（硬规则 1：只动颜色，不动尺寸） */
+body,
+.card,
+.c-ava,
+.big-ava,
+.chat-head .ava,
+.m-ava {
+  transition: background-color var(--dur-3) var(--ease-out),
+    color var(--dur-3) var(--ease-out),
+    border-color var(--dur-3) var(--ease-out);
+}
+
+/* ---------------------------------------------------------------- 轻提示（壳的 toast()） */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 88px;
+  transform: translate(-50%, 8px);
+  z-index: 60;
+  max-width: min(80vw, 420px);
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: rgba(17, 27, 33, 0.92);
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---------------------------------------------------------------- 输入框（多张卡共用；.pill 的 flex 布局由 style-kit.css 给） */
+.pill {
+  border: none;
+}
+.pill-input {
+  flex: 1;
+  border: none;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  resize: none;
+  max-height: 120px;
+  line-height: 1.4;
+}
+
+/* ---------------------------------------------------------------- 壁纸层
+   三种壁纸由 js/core/theme.js 的 applyWallpaperLayer(el, wallpaper) 挂上 data-wall，
+   颜色/图案全部在这里定义（卡片不写壁纸色值）。 */
+#wallpaper[data-wall="aurora"] {
+  background-image: linear-gradient(135deg, #dfe9f3 0%, #f4e6f0 50%, #e5f3ea 100%);
+}
+#wallpaper[data-wall="forest"] {
+  background-image: linear-gradient(160deg, #0e3a2c, #136b4f 55%, #0a2a20);
+}
+/* dusk：紫色等高线（mask + 主题紫，换主题色不跟随时固定 #7c5cff） */
+#wallpaper[data-wall="dusk"] {
+  background-image: none;
+  background-color: #7c5cff;
+  -webkit-mask-image: url("assets/topography.svg");
+  mask-image: url("assets/topography.svg");
+  -webkit-mask-size: 300px 300px;
+  mask-size: 300px 300px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  opacity: 0.1;
+}

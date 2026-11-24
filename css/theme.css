@@ -1,0 +1,462 @@
+/* css/theme.css — 只放设计 token（颜色／圆角／字号／间距），不放任何组件样式。
+   改色改字号只改这里；某张卡的具体长相去 css/card-*.css。
+   来源：C:\Meru\website\su\preview\styles.html 的六套 skin 变量表（用户已肉眼确认）。
+   由 js/core/theme.js 在 body 上写 data-skin / --accent / --send-bg / data-wallpaper / --dim-opacity。 */
+
+/* ---------------------------------------------------------------- 默认 token（skin=notion） */
+:root,
+body[data-skin="notion"] {
+  --font: Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 页面与卡片 */
+  --app-bg: #f6f5f4;
+  --chat-bg: #ffffff;
+  --text: #000000;
+
+  /* 面板（会话列表 / 设置 / 详情） */
+  --panel-bg: #ffffff;
+  --panel-fg: #000000;
+  --panel-line: #e6e6e6;
+  --panel-soft: #f6f5f4;
+  --active-bg: #f6f5f4;
+  --active-fg: #000000;
+
+  /* 顶部条 */
+  --head-bg: #ffffff;
+  --head-fg: #000000;
+  --head-name-size: 16px;
+
+  /* 头像 */
+  --ava-bg: #0075de;
+  --ava-fg: #ffffff;
+
+  /* 气泡 */
+  --bubble-radius: 8px;
+  --tail-radius: 8px;
+  --bubble-them-bg: #f6f5f4;
+  --bubble-them-fg: #000000;
+  --bubble-me-bg: #e8f2fd;
+  --bubble-me-fg: #0b1b2b;
+  --bubble-maxw: 80%;
+  --bubble-fs: 15px;
+  --bubble-lh: 1.55;
+  --bubble-pad: 9px 13px;
+  --bubble-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2px 7.8px rgba(0, 0, 0, 0.027);
+  --meta: #615d59;
+  --tick: #0075de;
+
+  /* 其它块 */
+  --divider-bg: #f6f5f4;
+  --divider-fg: #615d59;
+  --quote-bg: #f6f5f4;
+  --quote-border: #0075de;
+  --quote-name: #0075de;
+  --code-bg: #f6f5f4;
+  --code-fg: #000000;
+  --code-border: 1px solid #e6e6e6;
+  --copy-bg: #ffffff;
+  --copy-fg: #615d59;
+
+  /* 输入区 */
+  --foot-bg: #ffffff;
+  --foot-border: 1px solid #e6e6e6;
+  --input-bg: #f6f5f4;
+  --input-fg: #615d59;
+  --input-radius: 8px;
+  --send-bg: #0075de;
+  --send-fg: #ffffff;
+
+  /* 框架 */
+  --frame-radius: 8px;
+  --frame-border: 1px solid #e6e6e6;
+
+  /* 业务色 */
+  --accent: #0075de;
+  --danger: #d94f4f;
+
+  /* 间距 / 画幅 */
+  --body-pad: 8%;
+  --gap: 8px;
+  --maxw: 860px;
+}
+
+/* ---------------------------------------------------------------- wa */
+body[data-skin="wa"] {
+  --font: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --app-bg: #fafafa;
+  --chat-bg: #ffffff;
+  --text: #111b21;
+
+  --panel-bg: #ffffff;
+  --panel-fg: #111b21;
+  --panel-line: #e6e6e6;
+  --panel-soft: #f6f5f4;
+  --active-bg: #f6f5f4;
+  --active-fg: #111b21;
+
+  --head-bg: #008069;
+  --head-fg: #ffffff;
+  --head-name-size: 16px;
+
+  --ava-bg: #cfe9e2;
+  --ava-fg: #00695f;
+
+  --bubble-radius: 7.5px;
+  --tail-radius: 0;
+  --bubble-them-bg: #ffffff;
+  --bubble-them-fg: #111b21;
+  --bubble-me-bg: #d9fdd3;
+  --bubble-me-fg: #111b21;
+  --bubble-maxw: 78%;
+  --bubble-fs: 14.5px;
+  --bubble-lh: 1.45;
+  --bubble-pad: 6px 9px 7px;
+  --bubble-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  --meta: #667781;
+  --tick: #53bdeb;
+
+  --divider-bg: #ffffff;
+  --divider-fg: #54656f;
+  --quote-bg: rgba(0, 0, 0, 0.05);
+  --quote-border: #00a884;
+  --quote-name: #008069;
+  --code-bg: rgba(0, 0, 0, 0.055);
+  --code-fg: #1f2c34;
+  --code-border: none;
+  --copy-bg: rgba(255, 255, 255, 0.85);
+  --copy-fg: #334;
+
+  --foot-bg: #f0f2f5;
+  --foot-border: none;
+  --input-bg: #ffffff;
+  --input-fg: #99a3a8;
+  --input-radius: 22px;
+  --send-bg: #00a884;
+  --send-fg: #ffffff;
+
+  --frame-radius: 12px;
+  --frame-border: none;
+
+  --accent: #00a884;
+  --danger: #d94f4f;
+  --body-pad: 7%;
+  --gap: 3px;
+  --maxw: 860px;
+}
+
+/* ---------------------------------------------------------------- gpt */
+body[data-skin="gpt"] {
+  --app-bg: #ffffff;
+  --chat-bg: #ffffff;
+  --text: #0d0d0d;
+
+  --panel-bg: #ffffff;
+  --panel-fg: #0d0d0d;
+  --panel-line: #ececec;
+  --panel-soft: #f7f7f8;
+  --active-bg: #f7f7f8;
+  --active-fg: #0d0d0d;
+
+  --head-bg: #ffffff;
+  --head-fg: #0d0d0d;
+  --head-name-size: 16px;
+
+  --ava-bg: #0d0d0d;
+  --ava-fg: #ffffff;
+
+  --bubble-radius: 14px;
+  --tail-radius: 14px;
+  --bubble-them-bg: #f7f7f8;
+  --bubble-them-fg: #0d0d0d;
+  --bubble-me-bg: #0d0d0d;
+  --bubble-me-fg: #ffffff;
+  --bubble-maxw: 78%;
+  --bubble-fs: 15px;
+  --bubble-lh: 1.6;
+  --bubble-pad: 10px 14px;
+  --bubble-shadow: none;
+  --meta: #6b6b6b;
+  --tick: #0d0d0d;
+
+  --divider-bg: #f7f7f8;
+  --divider-fg: #6b6b6b;
+  --quote-bg: #f7f7f8;
+  --quote-border: #0d0d0d;
+  --quote-name: #6b6b6b;
+  --code-bg: #f7f7f8;
+  --code-fg: #0d0d0d;
+  --code-border: 1px solid #ececec;
+  --copy-bg: #ffffff;
+  --copy-fg: #6b6b6b;
+
+  --foot-bg: #ffffff;
+  --foot-border: none;
+  --input-bg: #f7f7f8;
+  --input-fg: #6b6b6b;
+  --input-radius: 22px;
+  --send-bg: #0d0d0d;
+  --send-fg: #ffffff;
+
+  --frame-radius: 14px;
+  --frame-border: 1px solid #ececec;
+
+  --accent: #0d0d0d;
+  --danger: #d94f4f;
+  --body-pad: 8%;
+  --gap: 8px;
+  --maxw: 860px;
+}
+
+/* ---------------------------------------------------------------- claude */
+body[data-skin="claude"] {
+  --app-bg: #f5f1ea;
+  --chat-bg: #faf9f5;
+  --text: #1f1e1b;
+
+  --panel-bg: #faf9f5;
+  --panel-fg: #1f1e1b;
+  --panel-line: #e3ded2;
+  --panel-soft: #f0ece1;
+  --active-bg: #f0ece1;
+  --active-fg: #1f1e1b;
+
+  --head-bg: #faf9f5;
+  --head-fg: #1f1e1b;
+  --head-name-size: 16px;
+
+  --ava-bg: #d97757;
+  --ava-fg: #ffffff;
+
+  --bubble-radius: 10px;
+  --tail-radius: 10px;
+  --bubble-them-bg: #f0ece1;
+  --bubble-them-fg: #1f1e1b;
+  --bubble-me-bg: #d97757;
+  --bubble-me-fg: #ffffff;
+  --bubble-maxw: 80%;
+  --bubble-fs: 15px;
+  --bubble-lh: 1.6;
+  --bubble-pad: 10px 14px;
+  --bubble-shadow: none;
+  --meta: #7c766b;
+  --tick: #d97757;
+
+  --divider-bg: #f0ece1;
+  --divider-fg: #7c766b;
+  --quote-bg: #f0ece1;
+  --quote-border: #d97757;
+  --quote-name: #d97757;
+  --code-bg: #f0ece1;
+  --code-fg: #1f1e1b;
+  --code-border: 1px solid #e3ded2;
+  --copy-bg: #faf9f5;
+  --copy-fg: #7c766b;
+
+  --foot-bg: #faf9f5;
+  --foot-border: 1px solid #e3ded2;
+  --input-bg: #f0ece1;
+  --input-fg: #7c766b;
+  --input-radius: 10px;
+  --send-bg: #d97757;
+  --send-fg: #ffffff;
+
+  --frame-radius: 10px;
+  --frame-border: 1px solid #e3ded2;
+
+  --accent: #d97757;
+  --danger: #d94f4f;
+  --body-pad: 8%;
+  --gap: 8px;
+  --maxw: 860px;
+}
+
+/* ---------------------------------------------------------------- tg（Telegram） */
+body[data-skin="tg"] {
+  --app-bg: #e6ebee;
+  --chat-bg: #ffffff;
+  --text: #000000;
+
+  --panel-bg: #ffffff;
+  --panel-fg: #000000;
+  --panel-line: #e6ebee;
+  --panel-soft: #f4f4f5;
+  --active-bg: #3390ec;
+  --active-fg: #ffffff;
+
+  --head-bg: #ffffff;
+  --head-fg: #000000;
+  --head-name-size: 16px;
+
+  --ava-bg: #3390ec;
+  --ava-fg: #ffffff;
+
+  --bubble-radius: 12px;
+  --tail-radius: 0;
+  --bubble-them-bg: #ffffff;
+  --bubble-them-fg: #000000;
+  --bubble-me-bg: #eeffde;
+  --bubble-me-fg: #000000;
+  --bubble-maxw: 76%;
+  --bubble-fs: 14.5px;
+  --bubble-lh: 1.45;
+  --bubble-pad: 7px 11px;
+  --bubble-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+  --meta: #78848d;
+  --tick: #4fae4e;
+
+  --divider-bg: #e6ebee;
+  --divider-fg: #78848d;
+  --quote-bg: #f4f4f5;
+  --quote-border: #3390ec;
+  --quote-name: #3390ec;
+  --code-bg: #f4f4f5;
+  --code-fg: #000000;
+  --code-border: none;
+  --copy-bg: #ffffff;
+  --copy-fg: #78848d;
+
+  --foot-bg: #ffffff;
+  --foot-border: none;
+  --input-bg: #f4f4f5;
+  --input-fg: #78848d;
+  --input-radius: 18px;
+  --send-bg: #3390ec;
+  --send-fg: #ffffff;
+
+  --frame-radius: 0;
+  --frame-border: none;
+
+  --accent: #3390ec;
+  --danger: #d94f4f;
+  --body-pad: 7%;
+  --gap: 4px;
+  --maxw: 860px;
+}
+
+/* ---------------------------------------------------------------- imessage */
+body[data-skin="imessage"] {
+  --app-bg: #ffffff;
+  --chat-bg: #ffffff;
+  --text: #000000;
+
+  --panel-bg: #ffffff;
+  --panel-fg: #000000;
+  --panel-line: #e5e5ea;
+  --panel-soft: #f2f2f7;
+  --active-bg: #f2f2f7;
+  --active-fg: #000000;
+
+  --head-bg: #f7f7f7;
+  --head-fg: #000000;
+  --head-name-size: 15px;
+
+  --ava-bg: #8e8e93;
+  --ava-fg: #ffffff;
+
+  --bubble-radius: 18px;
+  --tail-radius: 18px;
+  --bubble-them-bg: #e9e9eb;
+  --bubble-them-fg: #000000;
+  --bubble-me-bg: #0b93f6;
+  --bubble-me-fg: #ffffff;
+  --bubble-maxw: 72%;
+  --bubble-fs: 15.5px;
+  --bubble-lh: 1.4;
+  --bubble-pad: 8px 13px;
+  --bubble-shadow: none;
+  --meta: #8e8e93;
+  --tick: #0b93f6;
+
+  --divider-bg: #ffffff;
+  --divider-fg: #8e8e93;
+  --quote-bg: #f2f2f7;
+  --quote-border: #0b93f6;
+  --quote-name: #0b93f6;
+  --code-bg: #f2f2f7;
+  --code-fg: #000000;
+  --code-border: none;
+  --copy-bg: #ffffff;
+  --copy-fg: #8e8e93;
+
+  --foot-bg: #ffffff;
+  --foot-border: 1px solid #e5e5ea;
+  --input-bg: #ffffff;
+  --input-fg: #8e8e93;
+  --input-radius: 20px;
+  --send-bg: #0b93f6;
+  --send-fg: #ffffff;
+
+  --frame-radius: 18px;
+  --frame-border: none;
+
+  --accent: #0b93f6;
+  --danger: #d94f4f;
+  --body-pad: 8%;
+  --gap: 8px;
+  --maxw: 860px;
+}
+
+/* ---------------------------------------------------------------- night */
+body[data-skin="night"] {
+  --app-bg: #141517;
+  --chat-bg: #1c1d21;
+  --text: #e6e6e6;
+
+  --panel-bg: #1c1d21;
+  --panel-fg: #e6e6e6;
+  --panel-line: #2c2e33;
+  --panel-soft: #232529;
+  --active-bg: #26282d;
+  --active-fg: #ffffff;
+
+  --head-bg: #1c1d21;
+  --head-fg: #e6e6e6;
+  --head-name-size: 16px;
+
+  --ava-bg: #3a3d44;
+  --ava-fg: #ffffff;
+
+  --bubble-radius: 10px;
+  --tail-radius: 10px;
+  --bubble-them-bg: #26282d;
+  --bubble-them-fg: #e6e6e6;
+  --bubble-me-bg: #2f6fed;
+  --bubble-me-fg: #ffffff;
+  --bubble-maxw: 78%;
+  --bubble-fs: 15px;
+  --bubble-lh: 1.55;
+  --bubble-pad: 9px 13px;
+  --bubble-shadow: none;
+  --meta: #9aa0a6;
+  --tick: #7cb3ff;
+
+  --divider-bg: #26282d;
+  --divider-fg: #9aa0a6;
+  --quote-bg: #26282d;
+  --quote-border: #7cb3ff;
+  --quote-name: #7cb3ff;
+  --code-bg: #232529;
+  --code-fg: #e6e6e6;
+  --code-border: 1px solid #2c2e33;
+  --copy-bg: #1c1d21;
+  --copy-fg: #9aa0a6;
+
+  --foot-bg: #1c1d21;
+  --foot-border: 1px solid #2c2e33;
+  --input-bg: #232529;
+  --input-fg: #9aa0a6;
+  --input-radius: 20px;
+  --send-bg: #2f6fed;
+  --send-fg: #ffffff;
+
+  --frame-radius: 10px;
+  --frame-border: 1px solid #2c2e33;
+
+  --accent: #2f6fed;
+  --danger: #ff6b6b;
+  --body-pad: 8%;
+  --gap: 8px;
+  --maxw: 860px;
+}

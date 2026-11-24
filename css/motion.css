@@ -1,0 +1,132 @@
+/* css/motion.css — 唯一动效层（2026-11-24 用户要求「把动效搞一下」）
+   规范见 docs/DEV.md §2.5。这个文件只放三样东西：
+     1) 时长 / 曲线 token
+     2) @keyframes
+     3) 通用动效类（.anim-*）
+   各 card-*.css 与 cards.css 只许引用这里，不许自己写数字时长或 @keyframes。
+   骨架由 lead 建，owner = dev-a（见 DEV.md §1）。 */
+
+:root {
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 260ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  /* 循环类动效（§2.5 第 10 项）与 stagger 步长；唯一允许超过 --dur-3 的两处 */
+  --dur-typing: 1.2s;
+  --typing-step: 150ms;
+  --stagger-step: 24ms;
+}
+
+/* ---------------------------------------------------------------- 聊天卡（dev-c）需要的 keyframes
+   §2.5 第 8 / 10 项。消费端由聊天卡自己挂类，本文件只提供 keyframes 与类。 */
+
+/* 新气泡入场（只有新增的那条挂 .anim-enter，流式增量不挂） */
+@keyframes anim-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-enter { animation: anim-enter var(--dur-2) var(--ease-spring) both; }
+
+/* 群聊「正在输入」三点呼吸（无限循环，流式结束由聊天卡移除节点，硬规则 6） */
+@keyframes anim-typing {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.anim-typing { animation: anim-typing var(--dur-typing) var(--ease-out) infinite; }
+.typing-dots > .anim-typing:nth-child(2) { animation-delay: var(--typing-step); }
+.typing-dots > .anim-typing:nth-child(3) { animation-delay: calc(var(--typing-step) * 2); }
+
+/* ---------------------------------------------------------------- keyframes
+   只动 transform / opacity（硬规则 1）。最长 --dur-3 = 260ms（硬规则 2）。
+   命名：anim-<对象>-<方向>。下面每个 keyframes 都有同名类在「通用动效类」段里消费。 */
+
+/* 卡片进出（壳层，js/shell.js 挂类）—— 窄屏 push/pop 带位移，宽屏只淡入 */
+@keyframes anim-card-push {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes anim-card-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes anim-card-pop {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(-12px); }
+}
+
+/* 首屏：.cards 整体淡入，防白闪 */
+@keyframes anim-cards-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 弹层（js/ui/atoms.js openOverlay 挂类）：遮罩淡，面板上滑 */
+@keyframes anim-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes anim-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes anim-sheet-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes anim-sheet-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(12px); }
+}
+
+/* 会话行 stagger（只有首次渲染挂，见 list.js 的 anim-stagger） */
+@keyframes anim-row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 壁纸换图：新壁纸从透明淡入，视觉上等同交叉淡入 */
+@keyframes anim-wall-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------- 通用动效类
+   各卡片与壳层只挂这些类，不自己写 animation 简写、不自己写时长。 */
+
+.anim-card-push { animation: anim-card-push var(--dur-3) var(--ease-out) both; }
+.anim-card-fade { animation: anim-card-fade var(--dur-2) var(--ease-out) both; }
+.anim-card-pop  { animation: anim-card-pop  var(--dur-2) var(--ease-in)  both; }
+.anim-cards-in  { animation: anim-cards-in  var(--dur-3) var(--ease-out) both; }
+.anim-fade-in   { animation: anim-fade-in   var(--dur-2) var(--ease-out) both; }
+/* 退场期间不再接点击（js/ui/atoms.js 的 close 依赖它，不写内联样式） */
+.anim-fade-out  { animation: anim-fade-out  var(--dur-2) var(--ease-in)  both; pointer-events: none; }
+.anim-sheet-in  { animation: anim-sheet-in  var(--dur-3) var(--ease-out) both; }
+.anim-sheet-out { animation: anim-sheet-out var(--dur-2) var(--ease-in)  both; }
+.anim-wall-fade { animation: anim-wall-fade var(--dur-3) var(--ease-out) both; }
+
+/* 会话列表 stagger：前 8 行按 --i 递延（8 × 24ms + 180ms ≈ 372ms < 400ms）。
+   标记类只由 list.js 在「首次渲染」挂一次，之后 reload 不重放（硬规则 4）。 */
+.anim-stagger > .conv:nth-child(-n + 8) {
+  animation: anim-row-in var(--dur-2) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger-step));
+}
+
+/* 全部动效在减少动态偏好下失效：只留 opacity 的极小变化，避免前庭不适 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0.01ms;
+    --dur-2: 0.01ms;
+    --dur-3: 0.01ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

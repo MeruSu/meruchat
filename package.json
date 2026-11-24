@@ -1,0 +1,55 @@
+{
+  "name": "meruchat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MeruChat — HTML/CSS web chat wrapped with Capacitor (Android/iOS) and Electron (desktop).",
+  "main": "electron/main.js",
+  "scripts": {
+    "serve": "echo \"Static dev preview: run  python -m http.server 8911  from this directory, then open http://localhost:8911/\"",
+    "www": "node scripts/sync-www.mjs",
+    "cap:add:android": "npm run www && npx cap add android",
+    "cap:add:ios": "npm run www && npx cap add ios",
+    "cap:sync": "npm run www && npx cap sync",
+    "cap:sync:android": "npm run www && npx cap sync android",
+    "cap:sync:ios": "npm run www && npx cap sync ios",
+    "build:win": "npx electron-builder --win",
+    "build:mac": "npx electron-builder --mac",
+    "build:linux": "npx electron-builder --linux",
+    "build:android": "cd android && gradlew.bat assembleRelease"
+  },
+  "devDependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/cli": "8.6.2",
+    "@capacitor/core": "8.6.2",
+    "@capacitor/ios": "8.6.2",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "pw.ms7.meruchat",
+    "productName": "MeruChat",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "_comment_filesystem": "@capacitor/filesystem 为可选依赖（离线缓存等场景），暂无代码引用；如不需要可移除 dependencies 中的该项。详见 docs/packaging.md。",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MeruSu/meruchat.git"
+  },
+  "homepage": "https://github.com/MeruSu/meruchat#readme"
+}

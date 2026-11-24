@@ -1,0 +1,12 @@
+{
+  "appId": "pw.ms7.meruchat",
+  "appName": "MeruChat",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": []
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

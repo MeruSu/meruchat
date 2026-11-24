@@ -1,0 +1,104 @@
+/* css/components.css — 应用级浮层与轻提示（唯一归属，dev-a）
+ * 来源：C:\Meru\website\meruchat\webapp\theme.css（未改动的原版）第 792-877 行，逐行搬回。
+ * 2026-11-25：css/theme.css 重写成「只有设计 token」后，这整段组件样式丢了，
+ * 导致所有弹层（confirm / menu / prompt / 成员编辑 / 压缩块摘要）退化成页面底部的透明文字。
+ * 规则：只放浮层类组件（.modal* / .sheet* / .member-row* / .empty-tip / .confirm-text / .toast 之外的补充）。
+ *       .toast 已在 css/cards.css:165，这里不重复。不要往这里加卡片样式。
+
+ */
+.modal-mask {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-mask[hidden] { display: none; }
+.modal {
+  width: min(420px, 92vw); max-height: 80vh;
+  background: var(--panel-bg, #fff); color: var(--panel-fg, #111);
+  border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,.28);
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; font-weight: 600; font-size: 15px;
+  border-bottom: 1px solid var(--panel-line, #eee);
+}
+.modal-x { border: none; background: none; cursor: pointer; font-size: 15px; opacity: .6; color: inherit; }
+.modal-x:hover { opacity: 1; }
+.modal-body { padding: 12px 14px; overflow-y: auto; }
+.modal-foot { padding: 10px 14px; border-top: 1px solid var(--panel-line, #eee); display: flex; justify-content: flex-end; gap: 8px; }
+.modal .field { margin-bottom: 12px; }
+.modal input[type=text], .modal textarea {
+  width: 100%; font: inherit; font-size: 13.5px;
+  color: var(--panel-fg, #111); background: var(--panel-soft, #f5f6f7);
+  border: 1px solid var(--panel-line, #eaeaea); border-radius: 8px;
+  padding: 8px 10px; outline: none;
+}
+.modal textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+
+/* 群成员行 */
+.member-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 2px; border-bottom: 1px solid var(--panel-line, #eee);
+}
+.member-row:last-child { border-bottom: none; }
+.member-row .mava {
+  width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 14px;
+}
+.member-row .minfo { flex: 1; min-width: 0; }
+.member-row .mname { font-weight: 600; font-size: 13.5px; }
+.member-row .mpersona { font-size: 12px; opacity: .6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-row .mact { display: flex; gap: 4px; }
+.member-row .mact button {
+  border: none; background: var(--panel-soft, #f5f6f7); cursor: pointer;
+  width: 28px; height: 28px; border-radius: 6px; color: inherit; opacity: .7;
+}
+.member-row .mact button:hover { opacity: 1; }
+.empty-tip { padding: 20px; text-align: center; font-size: 13px; opacity: .55; }
+
+/* 会话操作底部菜单 */
+.modal-mask.sheet-mask { align-items: flex-end; }
+.sheet {
+  width: min(420px, 92vw); margin-bottom: 12px;
+  background: var(--panel-bg, #fff); color: var(--panel-fg, #111);
+  border-radius: 12px; overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0,0,0,.28);
+}
+.sheet button {
+  display: block; width: 100%; text-align: left;
+  padding: 14px 18px; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 14.5px; color: inherit;
+  border-bottom: 1px solid var(--panel-line, #eee);
+}
+.sheet button:last-child { border-bottom: none; }
+.sheet button:hover { background: var(--panel-soft, #f5f6f7); }
+.sheet button.danger { color: #d94f4f; }
+
+/* 轻提示（替代已删除的状态栏） */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; z-index: 60;
+  transform: translate(-50%, 8px);
+  max-width: min(88vw, 420px);
+  padding: 10px 16px; border-radius: 10px;
+  background: rgba(20,20,22,.9); color: #fff;
+  font-size: 13px; line-height: 1.4; text-align: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* 纯确认弹层里的说明文字 */
+.confirm-text { font-size: 13.5px; line-height: 1.55; opacity: .85; }
+
+
+/* 详情卡里的纯文本提示行（style-kit 只定义了 .chat-body > .note，右栏里没有规则） */
+.sr-scroll > .note,
+.card-detail .field > .note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--meta, #615d59);
+  opacity: .8;
+}

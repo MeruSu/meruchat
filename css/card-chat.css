@@ -1,0 +1,186 @@
+/* card-chat.css — 聊天气泡卡片（chat-direct / chat-group）的视觉。
+   视觉值一律来自 css/style-kit.css（styles.html 8-734 行的抽取件）；本文件只补 style-kit 没有的群聊差异：
+   对方行的排版（头像 + 名字 + 气泡）、36px 消息头像、带头像后气泡的可用宽度。
+   除这 7 条以外不要再往本文件加东西；真要覆盖只能改布局外框（高度/flex/9:18 适配），不碰视觉值。
+   铁律：不给 .card-chat 加阴影（气泡的 --bubble-shadow 由 style-kit 提供）、不出现可见滚动条、卡片纯白。 */
+
+/* 1) 群聊对方行：头像与气泡列之间 8px、按顶对齐；左边距把头像顶到离卡片左缘约 12px
+      （= 头像宽度的 1/3，36/3；实测 27.7 − 16 = 11.7）。
+      -16px 是固定像素、不是 calc：.chat-body 的 padding 百分比以 .chat 为分母（8% → 27.69px），
+      .row 的 margin 百分比以 .chat-body 为分母（8% → 23.25px），两者不可互换，用 calc 只能抵掉其中一个。
+      换皮肤或改 --body-pad 时这 16px 必须跟着重算（DEV.md §5 坑 16 有同一条）。 */
+.card-chat .row.them {
+  gap: 8px;
+  align-items: flex-start;
+  margin-left: -16px;
+}
+
+/* 2) 消息头像（两侧同一套）：36px 圆形，颜色由 JS 内联给（该成员固定渐变） */
+.card-chat .row .msg-ava {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+/* 3) 名字在气泡外面：气泡列先拿到确定宽度，气泡再按百分比在它里面收缩。
+      flex:1 1 auto 让列吃掉整行剩余宽度（行宽 − 36 头像 − 8 间距），
+      这样气泡的 max-width:78% 才有确定的分母；两列都自己撑宽会互相依赖，塌到最小宽度。 */
+.card-chat .row.them .msg-col,
+.card-chat .row.me .msg-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 44px);
+}
+
+/* 3a) 列宽撑开之后必须按内容对齐，否则 flex 的默认 stretch 会把气泡拉满整列（短句也变成 450px） */
+.card-chat .row.them .msg-col {
+  align-items: flex-start;
+}
+
+/* 3b) 气泡上限：分母是上面那条给出确定宽度的 .msg-col（不是 shrink-to-fit 的自身宽度） */
+.card-chat .row .bubble {
+  max-width: var(--bubble-maxw, 78%);
+}
+
+/* 4) 群聊对方气泡上方的发言人名（气泡本体、圆角、颜色仍由 style-kit 的 .row.them .bubble 决定） */
+.card-chat .row.them .who-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+/* 5) 群聊自己那侧镜像：右边距把头像顶到离卡片右缘约 12px，头像排在气泡列右边。
+      同样是固定 -16px（理由见第 1 条）；
+      width:auto 是必需的：style-kit 给 .row 的 width:100% 会让负的 margin-right 被忽略，行退不回内容盒外。 */
+.card-chat .row.me {
+  margin-right: -16px;
+  gap: 8px;
+  align-items: flex-start;
+  width: auto;
+}
+
+/* 6) 自己的气泡列只补对齐：名字与气泡都贴右侧（宽度规则在第 3 条，两侧共用） */
+.card-chat .row.me .msg-col {
+  align-items: flex-end;
+}
+
+/* 7) 自己那侧的发言人名，样式与对方一致 */
+.card-chat .row.me .who-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+/* 8) 气泡配色：底色一律读气泡自己那位的 --accent-soft（由 JS 用 theme.deriveTheme 算好写上），
+      本文件不做任何颜色混合、也不加描边；--accent 只留给发言人名和头像。
+      群聊按发送者取色、私聊取会话色，取谁的色由卡片决定，CSS 不关心。 */
+.card-chat .row.me .bubble,
+.card-chat .row.them .bubble {
+  background-color: var(--accent-soft, #f6f5f4);
+  background: var(--accent-soft, #f6f5f4);
+  color: var(--panel-fg, #000);
+  /* 不写 box-shadow：气泡的厚度用 style-kit 的 --bubble-shadow（两层软影）。
+     用户否掉的是「描边」那圈 0 模糊的 rgba(60,60,67,.29) 传播环，不是这层软影。 */
+}
+
+/* 9) 带尾巴的皮肤上，尾巴跟着气泡底色走（气泡本身不加任何描边/线：
+      边界靠 --accent-soft 与卡片白面的色差立住，用户明确否掉了 box-shadow 描边）。 */
+.card-chat .row.me .bubble::before {
+  border-top-color: var(--accent-soft, #f6f5f4);
+}
+
+/* 10) 发送键跟用户的全局主题色走，不跟会话/成员（--send-bg 由 JS 写在卡片根上） */
+.card-chat .send {
+  background-color: var(--accent, #e5e5ea);
+  background: var(--send-bg, var(--accent, #e5e5ea));
+}
+
+/* 11) 聊天区底：该主题下的「白」。style-kit 用的是 --chat-bg，
+      主题三件套的 --accent-surface 优先，没有就退回 --chat-bg。 */
+.card-chat .chat {
+  background: var(--accent-surface, var(--chat-bg, #ffffff));
+}
+
+/* 12) 输入条：用该主题的浅色版，与气泡同一个 --accent-soft（详情卡的 textarea 已是这个口径）。
+      style-kit 的中性灰 #f6f5f4 只在变量缺失时兜底。 */
+.card-chat .pill {
+  background: var(--accent-soft, #f6f5f4);
+}
+
+/* 13) 发送键按下（DEV.md §2.5 第 9 项）：只动 transform，时长/曲线全来自 motion.css 的 token。
+      没有 JS 计时器，:active 就是按下态。 */
+.card-chat .send {
+  transition: transform var(--dur-1) var(--ease-out);
+}
+
+.card-chat .send:active {
+  transform: scale(0.92);
+}
+
+/* 14) ➤ ↔ ■ 两个图标叠在同一格（style-kit 的 .send 是 flex 居中，这里改 grid 让两层重合），
+      切换只做 opacity 交叉，不做位移/尺寸变化。 */
+.card-chat .send {
+  display: grid;
+  place-items: center;
+}
+
+.card-chat .send .ico {
+  grid-area: 1 / 1;
+  transition: opacity var(--dur-1) var(--ease-out);
+}
+
+.card-chat .send .ico-stop {
+  opacity: 0;
+}
+
+.card-chat .send.stop .ico-send {
+  opacity: 0;
+}
+
+.card-chat .send.stop .ico-stop {
+  opacity: 1;
+}
+
+/* 15) 群聊「正在输入」（DEV.md §2.5 第 10 项）：气泡区末尾的一行，闪烁节奏由 motion.css 的
+      .anim-typing 提供，本文件不写任何时长。节点由 chat-group.js 的 setTyping() 增删，
+      流式结束就移除，不常驻（硬规则 6）。 */
+.card-chat .typing {
+  position: relative;
+  z-index: 2;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  color: var(--panel-mute, #8a8a8e);
+  font-size: 13px;
+}
+
+.card-chat .typing-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.card-chat .typing-dots .anim-typing {
+  line-height: 1;
+}
+
+/* 16) 工具条：模型只调了工具、没说话的那一轮，用一行窄字代替空气泡。
+      纯静态排版，没有任何过渡/动画（§2.5 硬规则）。 */
+.card-chat .tool-line {
+  font-size: 12px;
+  color: var(--meta, #615d59);
+  opacity: 0.8;
+  padding: 2px 0;
+}

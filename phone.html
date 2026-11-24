@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeruChat · 9:19 手机预览</title>
+<style>
+  /* 手机比例预览壳：只负责把真应用整包塞进一个 9:19 的框里，不参与应用样式。
+     应用本身跑在 iframe 里（同源，IndexedDB / 事件 / 路由全是真的）。 */
+  :root {
+    --stage-bg: #f2f2f7;
+    --frame-line: rgba(60, 60, 67, 0.16);
+    --hint: rgba(60, 60, 67, 0.45);
+  }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: var(--stage-bg);
+    font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  /* 9:19 —— 高度先定，宽度按比例算，永远居中且不超视口 */
+  .phone {
+    aspect-ratio: 9 / 19;
+    height: min(calc(100dvh - 48px), 880px);
+    width: auto;
+    max-width: calc(100vw - 24px);
+    position: relative;
+    border-radius: 28px;
+    border: 1px solid var(--frame-line);
+    background: #fff;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .phone > iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+  }
+
+  .hint {
+    font-size: 11.5px;
+    letter-spacing: 0.2px;
+    color: var(--hint);
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+
+  <div class="phone" id="phone">
+    <iframe id="app" src="index.html" title="MeruChat"></iframe>
+  </div>
+
+  <div class="hint" id="hint">9:19</div>
+
+  <script>
+    // 把实际渲染尺寸写出来，方便肉眼核对比例（四舍五入到整数）。
+    const phone = document.getElementById("phone");
+    const hint = document.getElementById("hint");
+
+    function report() {
+      const r = phone.getBoundingClientRect();
+      const w = Math.round(r.width);
+      const h = Math.round(r.height);
+      hint.textContent = "9:19 · " + w + "×" + h;
+    }
+
+    report();
+    window.addEventListener("resize", report);
+  </script>
+
+</body>
+</html>

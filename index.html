@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>MeruChat</title>
+<link rel="stylesheet" href="css/style-kit.css" />
+<link rel="stylesheet" href="css/theme.css" />
+<link rel="stylesheet" href="css/motion.css" />
+<link rel="stylesheet" href="css/cards.css" />
+<link rel="stylesheet" href="css/card-list.css" />
+<link rel="stylesheet" href="css/card-chat.css" />
+<link rel="stylesheet" href="css/card-detail.css" />
+<link rel="stylesheet" href="css/card-settings.css" />
+  <link rel="stylesheet" href="css/components.css" />
+</head>
+<body data-skin="notion">
+
+  <!-- 壳：只放卡片容器，业务 DOM 全部由 js/cards/*.js 自己生成 -->
+  <div id="cards" class="cards" aria-live="polite"></div>
+
+  <script type="module" src="js/shell.js"></script>
+</body>
+</html>

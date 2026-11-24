@@ -1,0 +1,74 @@
+/* card-detail.css — 详情卡片（detail-direct / detail-group）独有样式。负责人 dev-b。
+ *
+ * 详情卡的视觉基准是 `C:\Meru\website\su\preview\styles.html` 第 833-869 行那一栏，
+ * 对应的 CSS 已由 lead 逐行抽成 `css/style-kit.css`（禁止改动）。所以本文件不再重写
+ * 第三页任何视觉值（头像/名字/字段/小标题/返回键全部交给 style-kit.css），
+ * 只保留三件事：
+ *   1. 卡片自身底色 + 滚动容器（详情卡自己滚，滚动条不可见）
+ *   2. 成员墙 .member-grid / .m-ava（第三页没有，用户点名要的「头像堆」）
+ *   3. 把「主题三件套」接到卡片内三个面（卡片底 / 输入框 / 头像）上
+ *
+ * 铁律（DEV.md 2.2，2026-11-24 更新）：不要阴影、不要可见滚动条、
+ * **不要任何描边**——面与面的分隔只由色差承担：
+ *   头像底 = var(--accent)（由 store.resolveAvatarColor 算，落在头像元素的内联底色上）
+ *   卡片底 = var(--accent-surface)
+ *   输入框 / 公告板底 = var(--accent-soft)
+ * 三件套只由 js/core/theme.js 的 deriveTheme() 派生，本文件不做 color-mix。
+ */
+
+.card.card-detail {
+  background: var(--accent-surface, var(--panel-bg, #fff));
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.card.card-detail::-webkit-scrollbar { display: none; }
+
+/* 卡片内的输入控件换成浅色主题面（style-kit 默认的 --panel-soft 不跟主题色走） */
+.card.card-detail input[type="text"],
+.card.card-detail textarea,
+.card.card-detail select {
+  background: var(--accent-soft, var(--panel-soft, #f5f6f7));
+  border-color: transparent;
+}
+
+/* 成员墙：像 GitHub 贡献格子一样一堆头像堆着（用户原话）。
+   底色由 JS 写内联（store.resolveAvatarColor 的结果），这里只管形状。
+   不写任何投影或描边（坑 18：卡片 CSS 一律不碰投影声明；`.m-ava` 本来也没有默认描边）。 */
+.member-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.member-grid .m-ava {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px;
+  /* §2.5 #11：只引用 motion.css 的 token，不写数字时长；只动 transform，不触发 layout */
+  transition: transform var(--dur-1, 120ms) var(--ease-out, ease-out);
+}
+.member-grid .m-ava:hover,
+.member-grid .m-ava:active { transform: scale(1.06); }
+
+/* 头像字色跟主题走（浅灰/白这类亮底需要深字），值来自 theme.deriveTheme 的 --accent-on */
+.card.card-detail .big-ava,
+.card.card-detail .m-ava {
+  color: var(--accent-on, #fff);
+}
+
+/* 上下文区块（DEV.md §2.6 可见性）：一行一个压缩块，点开看全文。
+   分隔只靠一条极细的 --panel-line 底线，不加投影、不加动效。 */
+.card-detail .ctx-block {
+  display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 6px 0;
+  border-bottom: 0.8px solid var(--panel-line, #e6e6e6); cursor: pointer;
+}
+.ctx-block:last-child { border-bottom: none; }
+.ctx-block .idx { font-variant-numeric: tabular-nums; opacity: .6; min-width: 18px; }
+.ctx-block .range { opacity: .6; font-size: 12px; }
+.ctx-block .sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-block .tk { opacity: .5; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ctx-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* 只读全文弹层的内文：保留摘要换行、超长自己滚、滚动条不可见（与卡片同一口味） */
+.ctx-summary {
+  white-space: pre-wrap; overflow-y: auto; max-height: 50vh;
+  font-size: 13px; line-height: 1.55; scrollbar-width: none;
+}
+.ctx-summary::-webkit-scrollbar { display: none; }

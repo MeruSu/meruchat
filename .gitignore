@@ -1,0 +1,24 @@
+# 依赖与构建产物
+node_modules/
+dist/
+www/
+
+# 原生壳（Capacitor 生成，可重建；含签名材料，绝不入库）
+android/
+ios/
+.gradle/
+*.apk
+*.aab
+*.keystore
+*.jks
+local.properties
+
+# 本地运行时
+*.log
+.tmp/
+
+# OS / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

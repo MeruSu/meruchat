@@ -1,0 +1,15 @@
+/* css/card-settings.css — 全局设置卡片（右栏）
+   视觉全部来自 css/style-kit.css（照搬 su/preview/styles.html，禁止修改）。
+   本文件只写卡片外框，不再手写任何等效样式。
+   卡片底走主题三件套的 --accent-surface（§2.3.1），与列表卡、详情卡同一口径。 */
+
+.card.card-settings {
+  background: var(--accent-surface, var(--panel-bg, #fff));
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.card.card-settings::-webkit-scrollbar {
+  display: none;
+}
