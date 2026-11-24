@@ -201,32 +201,12 @@ function paintMemberAva(box, member, settings) {
   applyAvatarInk(box, bg);
 }
 
-/** 工具条最多列几个名字（再多就折成「等 N 个工具」） */
-const TOOL_LINE_MAX = 3;
-
-/** 一条消息里所有工具调用的名字（保持出现顺序） */
-function toolCallNames(msg) {
-  const parts = msg && Array.isArray(msg.parts) ? msg.parts : [];
-  const names = [];
-  parts.forEach((p) => {
-    if (!p || p.type !== "tool-call") return;
-    names.push(typeof p.name === "string" && p.name ? p.name : "工具");
-  });
-  return names;
-}
-
-/** 工具条的文案。返回空串表示"这条不该画工具条"：
- *  有可见正文的消息正文优先；没有工具调用的空消息什么都不画（也不画空气泡）。 */
-function toolLineText(msg) {
-  if (!msg || msg.role === "user") return "";
-  const text = msg.content == null ? "" : String(msg.content);
-  if (text.trim() !== "") return "";
-  const names = toolCallNames(msg);
-  if (!names.length) return "";
-  if (names.length > TOOL_LINE_MAX) {
-    return "⚙ 调用了 " + names.slice(0, TOOL_LINE_MAX).join("、") + " 等 " + names.length + " 个工具";
-  }
-  return "⚙ 调用了 " + names.join("、");
+/** 工具调用与思考过程一律不显示（用户定的口径）：
+ *  只有"这一条有可见正文"的消息才画气泡；只走过工具调用的那一轮直接不画行。
+ *  工具/思考阶段的状态只体现在顶栏状态行（见 setBusy）。 */
+function hasVisibleText(msg) {
+  if (!msg) return false;
+  return String(msg.content == null ? "" : msg.content).trim() !== "";
 }
 
 /** 入场动效只挂一次：加 .anim-enter，动画结束后自己摘掉。
@@ -330,7 +310,7 @@ const card = {
     this.sendBtn.addEventListener("click", () => this.onSendClick());
   },
 
-  /** 群聊顶栏：群首字圆（单个 .ava，和私聊同构） + 群名 + 状态行「N 位成员」 */
+  /** 群聊顶栏：群首字圆（单个 .ava，和私聊同构） + 群名 + 状态行（空闲「N 位成员」/ 干活时「正在输入中…」） */
   mountHead() {
     if (!this.chatEl) return;
     const head = chatHead({
@@ -338,7 +318,7 @@ const card = {
       avaColor: resolveAvaColor(this.conv, this.ctx.settings || {}),
       avaImage: this.conv && this.conv.avatar && this.conv.avatar.image,
       name: this.convTitle(),
-      sub: this.members.length ? this.members.length + " 位成员" : "群聊",
+      sub: this.subText(),
       onBack: () => this.goBack(),
       onMore: () => this.openDetail(),
     });
@@ -350,6 +330,18 @@ const card = {
     this.nameEl = head.querySelector(".who .name");
     this.subEl = head.querySelector(".who .sub");
     this.bindHeadMenu(head);
+  },
+
+  /** 顶栏状态行文案。busy = 这一轮在跑（思考 / 调工具 / 吐字都算）。 */
+  subText() {
+    if (this.busy) return "正在输入中…";
+    return this.members.length ? this.members.length + " 位成员" : "群聊";
+  },
+
+  /** 工具调用与思考不显示，只把顶栏状态行切成「正在输入中…」；false 时切回「N 位成员」 */
+  setBusy(on) {
+    this.busy = !!on;
+    if (this.subEl) this.subEl.textContent = this.subText();
   },
 
   /** 数据每次进栈都重读（群成员可能在详情页改过） */
@@ -539,16 +531,20 @@ const card = {
       this.bodyEl.appendChild(el("div", "note", "发条消息开始聊天"));
       return;
     }
-    visible.forEach((m) => this.bodyEl.appendChild(this.messageRow(m)));
+    visible.forEach((m) => {
+      const row = this.messageRow(m);
+      if (row) this.bodyEl.appendChild(row);
+    });
     this.scrollBottom();
   },
 
   /** 增量入口：只追加这一条，并给它挂入场动效（唯一的"新增节点"通道） */
   appendMessage(msg) {
     if (!this.bodyEl) return null;
+    const row = this.messageRow(msg);
+    if (!row) return null;
     const hint = this.bodyEl.querySelector(".note");
     if (hint) hint.remove();
-    const row = this.messageRow(msg);
     this.bodyEl.appendChild(row);
     markEnter(row);
     this.scrollBottom();
@@ -557,21 +553,18 @@ const card = {
 
   /** 一条消息 = .row.them / .row.me > .msg-ava + .msg-col(.who-name + .bubble)
    *  头像两侧对称：对方在气泡左侧、自己在气泡右侧；名字始终在气泡外面、气泡上方。
-   *  没有可见正文、只走过工具调用的那一轮：把 .bubble 换成一行 .tool-line（群里仍带头像与名字，谁调的一目了然）。 */
+   *  没有可见正文的（只走过工具调用 / 只有思考）返回 null：不画行、不留空气泡、也不显示工具名。 */
   messageRow(msg) {
+    if (!msg) return null;
+    if (!hasVisibleText(msg)) return null;
     const mine = msg.role === "user";
     const row = el("div", mine ? "row me" : "row them");
     const name = mine ? selfIdentity().name : this.memberName(msg.memberId);
     const col = el("div", "msg-col");
     col.appendChild(el("span", "who-name", name));
-    const toolText = toolLineText(msg);
-    if (toolText) {
-      col.appendChild(el("div", "tool-line", toolText));
-    } else {
-      const bubbleEl = el("div", "bubble", msg.content == null ? "" : String(msg.content));
-      paintBubble(bubbleEl, accentForMessage(msg, this.members, this.ctx.settings || {}));
-      col.appendChild(bubbleEl);
-    }
+    const bubbleEl = el("div", "bubble", String(msg.content));
+    paintBubble(bubbleEl, accentForMessage(msg, this.members, this.ctx.settings || {}));
+    col.appendChild(bubbleEl);
     const ava = mine ? this.selfAva() : this.msgAva(msg.memberId, name);
     if (mine) {
       row.appendChild(col);
@@ -791,14 +784,12 @@ const card = {
           },
           onEvent: (name, payload) => {
             if (stale()) return;
+            // 工具调用 / 思考一律不显示，只保证顶栏停在「正在输入中…」
             if (name === "text_delta" && payload && typeof payload.text === "string") {
               bubble.full = payload.text;
-              bubble.textNode.nodeValue = bubble.full;
+              this.ensureStreamBubble(bubble);
+              if (bubble.textNode) bubble.textNode.nodeValue = bubble.full;
               this.scrollBottom();
-            } else if (name === "tool_execution_start" && payload) {
-              this.setTyping(member, payload.name);
-            } else if (name === "tool_execution_end" && payload && payload.isError) {
-              this.setTyping(member, payload.name + " 失败");
             }
           },
         });
@@ -810,8 +801,12 @@ const card = {
 
       if (failure && failure.name !== "AbortError") {
         failures += 1;
-        bubble.bubble.textContent =
-          (bubble.full ? bubble.full + "\n" : "") + "[回复失败: " + errorText(failure) + "]";
+        // 失败必须让用户看见（这不是工具/思考的噪音），所以这里才补一个气泡
+        this.ensureStreamBubble(bubble);
+        if (bubble.bubble) {
+          bubble.bubble.textContent =
+            (bubble.full ? bubble.full + "\n" : "") + "[回复失败: " + errorText(failure) + "]";
+        }
         // 失败成员的沉默不能当成默认同意
         unreplied.push(unrepliedLine(member.name));
         if (failures >= HALT_AFTER_FAILURES) {
@@ -831,7 +826,7 @@ const card = {
 
       // 静默：模型只输出静默标记时这一条不该变成可见消息
       if (isSilent(text2)) {
-        if (!bubble.full) bubble.rowEl.remove();
+        if (bubble.rowEl) bubble.rowEl.remove();
         const recs = (out && out.messages) || [];
         for (const rec of recs) await store.deleteMessages(rec.id).catch(() => {});
         if (plan.reason === "rotate") unreplied.push(unrepliedLine(member.name));
@@ -840,12 +835,13 @@ const card = {
       }
 
       bubble.full = text2;
-      bubble.textNode.nodeValue = text2;
-      // 这一轮只有工具调用、没有正文：空气泡当场移除，重画时由 .tool-line 接替
-      if (!text2.trim()) bubble.rowEl.remove();
+      this.ensureStreamBubble(bubble);
+      if (bubble.textNode) bubble.textNode.nodeValue = text2;
+      // 这一轮只有工具调用、没有正文：气泡没建过，什么都不用做（工具/思考一律不显示）
+      if (!text2.trim() && bubble.rowEl) bubble.rowEl.remove();
       // 落盘顺序按 call 顺序、seq 单调递增（agent 内部按 step 落，这里统一重编号）。
       // 正文只写进**最后一条**：工具调用那几步的 content 必须保持为空，
-      // 否则同一条回复会被复制成 N 条一模一样的可见消息（重画时只该有一条气泡 + 若干 .tool-line）。
+      // 否则同一条回复会被复制成 N 条一模一样的可见消息（重画时只该有一条气泡）。
       const recs = (out && out.messages) || [];
       for (let i = 0; i < recs.length; i++) {
         const patch = { seq: this.takeSeq() };
@@ -870,37 +866,20 @@ const card = {
     await this.load();
   },
 
-  /** 正在输入（单值，只表示"当前这一位在说话"）：气泡区末尾的一行 .typing，流式结束必须移除。
-   *  顶栏状态行始终保持「N 位成员」不动（lead 定）。 */
+  /** 「正在输入中…」只出现在**顶栏状态行**（用户口径：工具调用与思考一律不显示）。
+   *  extra（工具名之类）一律不显示，所以这里忽略第二个参数。 */
   setTyping(member, extra) {
-    if (!this.bodyEl) return;
-    const old = this.bodyEl.querySelector(".typing");
+    void extra;
     if (!member) {
-      if (old) old.remove();
+      this.setBusy(false);
       return;
     }
-    const name = String(member.name || "成员");
-    const label = "「" + name + "」正在输入" + (extra ? " · " + extra : "");
-    if (old) {
-      // 已经在闪了：只换文字，不重建节点（重建会让动画从头开始，闪一下）
-      const text = old.querySelector(".typing-text");
-      if (text) text.textContent = label;
-      return;
-    }
-    const row = el("div", "typing");
-    row.appendChild(el("span", "typing-text", label));
-    const dots = el("span", "typing-dots");
-    for (let i = 0; i < 3; i++) dots.appendChild(el("span", "anim-typing", "·"));
-    row.appendChild(dots);
-    this.bodyEl.appendChild(row);
-    this.scrollBottom();
+    this.setBusy(true);
   },
 
-  /** 流式中断/结束、卸载、切页都要保证 .typing 不残留（DEV.md §2.5 硬规则 6） */
+  /** 流式中断/结束、卸载、切页都要保证状态行回到「N 位成员」（DEV.md §2.5 硬规则 6） */
   clearTyping() {
-    if (!this.bodyEl) return;
-    const old = this.bodyEl.querySelector(".typing");
-    if (old) old.remove();
+    this.setBusy(false);
   },
 
   /** DEV.md §2.6：每个成员发言前各自折叠 + 拼一次上下文（responder.id 决定哪条 assistant 算自己的）。
@@ -1055,10 +1034,16 @@ const card = {
   },
 
   /** 流式气泡：与 messageRow 同构（.msg-ava + .msg-col > .who-name + .bubble），只是文本节点留空待填。
-   *  气泡在 delta 开始前建出来，入场动效此刻挂上；delta 只改 textNode，不碰类。 */
+   *  **开流时不建**：思考/调工具阶段不该出现任何气泡，真正有第一个字时才由 ensureStreamBubble 建出来。 */
   startStreamBubble(member) {
     const hint = this.bodyEl ? this.bodyEl.querySelector(".note") : null;
     if (hint) hint.remove();
+    return { rowEl: null, bubble: null, textNode: null, full: "", member: member || null };
+  },
+
+  ensureStreamBubble(live) {
+    if (!live || live.rowEl) return live;
+    const member = live.member;
     const name = member && member.name ? member.name : "";
     const row = el("div", "row them");
     row.appendChild(this.msgAva(member && member.id, name));
@@ -1069,14 +1054,16 @@ const card = {
       bubbleEl,
       accentForMessage({ role: "assistant", memberId: member && member.id }, this.members, this.ctx.settings || {})
     );
-    const textNode = document.createTextNode("");
+    const textNode = document.createTextNode(live.full || "");
     bubbleEl.appendChild(textNode);
     col.appendChild(bubbleEl);
     row.appendChild(col);
     if (this.bodyEl) this.bodyEl.appendChild(row);
     markEnter(row);
-    this.scrollBottom();
-    return { rowEl: row, bubble: bubbleEl, textNode: textNode, full: "" };
+    live.rowEl = row;
+    live.bubble = bubbleEl;
+    live.textNode = textNode;
+    return live;
   },
 
   showError(text) {

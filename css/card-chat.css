@@ -151,36 +151,3 @@
 .card-chat .send.stop .ico-stop {
   opacity: 1;
 }
-
-/* 15) 群聊「正在输入」（DEV.md §2.5 第 10 项）：气泡区末尾的一行，闪烁节奏由 motion.css 的
-      .anim-typing 提供，本文件不写任何时长。节点由 chat-group.js 的 setTyping() 增删，
-      流式结束就移除，不常驻（硬规则 6）。 */
-.card-chat .typing {
-  position: relative;
-  z-index: 2;
-  align-self: flex-start;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
-  color: var(--panel-mute, #8a8a8e);
-  font-size: 13px;
-}
-
-.card-chat .typing-dots {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.card-chat .typing-dots .anim-typing {
-  line-height: 1;
-}
-
-/* 16) 工具条：模型只调了工具、没说话的那一轮，用一行窄字代替空气泡。
-      纯静态排版，没有任何过渡/动画（§2.5 硬规则）。 */
-.card-chat .tool-line {
-  font-size: 12px;
-  color: var(--meta, #615d59);
-  opacity: 0.8;
-  padding: 2px 0;
-}

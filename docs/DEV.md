@@ -1,7 +1,7 @@
 # meruchat 开发文档（唯一事实来源）
 
 > **每个子代理开工前必须读完这份文件**。任何新决定、新文件、新坑，先来这里登记，再动手。
-> 最后更新：2026-11-24
+> 最后更新：2026-11-25
 
 ---
 
@@ -287,7 +287,7 @@ resolveAvatarColor(avatar, accent)  // avatar.color || accent || DEFAULT_ACCENT
 | 7 | FAB 按下 | dev-a | `transform: scale(.94)`，`--dur-1` |
 | 8 | 新气泡出现 | dev-c（`chat-*.js` 加类） | `translateY(6px)→0` + 淡入，`--dur-2` `--ease-spring`；**只有新增那条**加 `.anim-enter` |
 | 9 | 发送键按下 / `➤↔■` | dev-c | `scale(.92)` `--dur-1`；图标切换 `opacity` 交叉 `--dur-1` |
-| 10 | 群聊「正在输入」 | dev-c | 三点或状态点 `opacity 1→.35→1` 无限循环 1.2s，**流式结束必须移除**（同硬规则 6） |
+| 10 | 群聊「正在输入」 | dev-c | ~~三点或状态点 `opacity 1→.35→1` 无限循环 1.2s~~ **（2026-11-25 已下线：气泡区 `.typing` 行整套删除，状态只走顶栏 `.sub`，见 §2.6.1）** |
 | 11 | 详情卡成员头像 | dev-b | 按下/悬停 `scale(1.06)` `--dur-1`；编辑弹层：遮罩 `opacity` `--dur-2`、面板 `translateY(12px)→0` `--dur-3` |
 | 12 | 主题色 / 壁纸切换 | dev-a | 吃 `--accent*` 的元素 `transition: background-color/color var(--dur-3) var(--ease-out)`；壁纸层 `opacity` 交叉淡入 `--dur-3` |
 
@@ -356,6 +356,69 @@ Block = { id, conversationId, index, fromSeq, toSeq, count, summary, tokens, cre
 **设置项**（`store` 的 settings 里加）：`contextBudget`（默认 8000）、`contextCompress`（默认 true，false 时不折叠）。两处都进设置卡。
 
 **可见性**（最小集，只说数字，不做花活）：聊天卡底栏一行 `压缩块 N · 未压缩 M 条 · 约 X.Xk`；详情卡加「上下文」区块，列出各块的序号 / 覆盖范围 / 摘要首 60 字 / token，点开看全文，底部一个「立即压缩」按钮（调 `store.foldOldest()`）。
+
+---
+
+### 2.6.1 工具调用与思考一律不显示（状态只上顶栏）（2026-11-25 用户定，冻结）
+
+> 编号只是排在 §2.6 后面，**与上文的六段拼装无关**；本节讲的是「消息区到底画什么」。
+
+用户原话（两句连在一起才是完整口径）：
+
+> 「工具调用和思考等除了正式输出的部分一律不显示」
+> 「但是上述状态 会更新会话状态到 正在输入中...」
+
+**两条渲染规则（唯一例外见下面「失败可见」）：**
+
+| 这一条消息 | 画什么 |
+|---|---|
+| **没有可见正文**（只走过工具调用 / 只有思考 / `content` 全是空白） | **什么都不画** —— 不画 `.row`、不留空气泡、**也不显示工具名** |
+| **有可见正文** | 只画气泡：私聊 `.row.them`/`.row.me > .bubble`，群聊 `.row.them > .msg-ava + .msg-col > .who-name + .bubble`；工具与思考的字**一个都不进 DOM** |
+
+落点（两卡同一口径）：
+
+- `hasVisibleText(msg)` = `String(msg.content == null ? "" : msg.content).trim() !== ""`（`js/cards/chat-direct.js:128` / `js/cards/chat-group.js:207`）
+- `messageRow(msg)` 第一行 `if (!hasVisibleText(msg)) return null;`（`chat-direct.js:436` / `chat-group.js:559`）
+- `renderMessages()`（`chat-direct.js:413`）与 `appendMessage()`（`chat-direct.js:422`）拿到 `null` 直接跳过，不 append 空节点
+- **`TOOL_LINE_MAX` / `toolCallNames` / `toolLineText` / `showToolNote` 整组已删除**（两文件命中 0）。旧的 `⚙ 调用了 xxx` 工具条不再是「降级展示」，而是不存在。
+
+**状态行：唯一可见的反馈。** 只落在顶栏 `.chat-head .who .sub`：
+
+| 卡 | busy（思考 / 调工具 / 吐字 / 折叠都算） | 空闲 |
+|---|---|---|
+| 私聊 `subText()`（`chat-direct.js:254`） | `正在输入中…` | `在线` |
+| 群聊 `subText()`（`chat-group.js:336`） | `正在输入中…` | `N 位成员`（没有成员时 `群聊`） |
+
+`setBusy(on)` 直接写 `this.subEl.textContent = this.subText()`（`chat-direct.js:259` / `chat-group.js:342`），`mountHead()` 的 `sub:` 取 `this.subText()`（`chat-direct.js:235` / `chat-group.js:321`）。**气泡区没有任何「正在输入」节点**（原 `.typing` 行已删，见本节末）。
+
+群的 busy 是**单值**：`setTyping(member, extra)` 只路由到 `setBusy(!!member)`（`chat-group.js:871`），第二个参数 `extra`（原来要展示的工具名）用 `void extra` 丢弃；`clearTyping()` → `setBusy(false)`（`chat-group.js:881`）。不要为「谁在输入」再加节点。
+
+**流式气泡改懒建（时序是关键）：**
+
+1. `startStreamBubble()` **不建任何 DOM**，只返回句柄：私聊 `{rowEl:null, bubble:null, full:""}`（`chat-direct.js:618`）、群聊 `{rowEl:null, bubble:null, textNode:null, full:"", member}`（`chat-group.js:1038`）。
+2. 第一个 `text_delta`（`chat-direct.js:582` 的 `bubbleFor` / `chat-group.js:790`）才调 `ensureStreamBubble(live)` 建出 `.row > .msg-ava + .msg-col > .who-name + .bubble`，入场动效此刻挂一次 `.anim-enter`；失败补错时也走同一个入口（`chat-direct.js:598` / `chat-group.js:805`）。
+3. **为什么必须懒建**：一轮带工具调用的回复会先经历「思考 → `tool_call` → `tool_result` → 正文」，这几秒里如果开流就建气泡，页面上就是一个**空空气泡**（旧实现就是这个症状：`content` 为空的那一轮被画成空 `.bubble`，刷新后还在）。懒建之后，纯工具轮从头到尾没有任何节点。
+4. `ensureStreamBubble()` 幂等 —— `if (!live || live.rowEl) return live;`，后续 delta 只改 `live.textNode.nodeValue` / `live.bubble.textContent`，不再重复建行。
+
+**失败可见是唯一例外**（错误是给用户看的，不是噪音）：
+
+- 请求失败（非 `AbortError`）：照样 `ensureStreamBubble()`，把 `[回复失败: …]` 写进气泡正文（`chat-direct.js:597-601` / `chat-group.js:802-809`）。
+- `AbortError`（用户点了停止）：气泡若已建则 `live.rowEl.remove()`，**不留「已停止」空气泡**（`chat-direct.js:594-596`）。
+- 成功但没有正文（纯工具轮）：气泡本来就没建，只做 `if (live.rowEl) live.rowEl.remove()` 兜底（`chat-direct.js:602-605` / `chat-group.js:841`）。
+
+**私聊 `setBusy(true)` 在 `prepareContext` 之前**（`chat-direct.js:544`）：折叠摘要本身也要调模型，从那一刻起就该显示「正在输入中…」；`finally` 里 `setBusy(false)`（`chat-direct.js:590`），`stopStream()` 也清。
+
+**CSS 侧：**
+
+- `css/card-chat.css` 的 `.card-chat .typing` / `.typing-dots` / `.typing-dots .anim-typing` / `.card-chat .tool-line` 四组规则**已删除**（原 `:155-186`，共 33 行），文件现在 **153 行**，全文件 `typing|tool-line` 命中 **0**。
+- `css/motion.css` 里 dev-a 给的 `@keyframes anim-typing`（:33）、`.anim-typing`（:37）、`.typing-dots > .anim-typing`（:38-39）与 token `--dur-typing`（:17）/ `--typing-step`（:18）还留着，但**已无消费者**（DOM 里不再有 `.typing-dots`），渲染上等于不存在。要清就整段删干净，别只删一半。
+
+**验收口径（DOM 层，不靠"看起来对"）：**
+
+1. 跑一轮纯工具调用（例如让它调 `memo`）：该轮在 `.chat-body` 里**节点数 0**（既无 `.row` 也无 `.tool-line`）—— `.tool-line` 应是 0 而不是「文案变短」。
+2. busy 期间顶栏 `.sub` 文本 = `正在输入中…`，结束后回到 `在线` / `N 位成员`（不是 `群聊`）。
+3. 断开网关造一次失败：气泡存在且正文以 `[回复失败: ` 开头。
+4. 流式期间（第一字之前）`.chat-body .row` 不应多出一个空 `.bubble`（`textContent === ""` 的行数 0）。
 
 ---
 
@@ -543,3 +606,4 @@ node dev-server.mjs 8915
 | 2026-11-25 | lead | **工具 3 → 6：新增 `set_name` / `set_persona` / `set_look`，上下文加第 [5] 段「工具与时间」（用户 m07704 四条要求）**：① `js/core/tools/profile.js`（244 行）三个工具统一签名 `({ store, convId, getResponder, onChanged })`、`executionMode:"sequential"`，改的永远是**这一轮发言的成员**（`getResponder()` 拿不到就报 `no_responder`，不猜不改别人）。`set_name({name})` 1–24 字（按码点数，不按 UTF-16 长度）；**私聊要同时写 `conv.title`**（私聊顶栏读的是 `conv.title`，见 `chat-direct.js:249-256` 的 `mountHead()`；`detail-direct.js:118-124` 现有改名逻辑也是同时写两处），群聊只写 `member.name` 不动群名。`set_persona({persona})` 整段替换、空串清空。`set_look({avatarColor?, avatarLabel?, wallpaper?})` 至少给一个，颜色校验 `/^#[0-9a-fA-F]{6}$/`、壁纸 `aurora|forest|dusk|default`（`default` → `null` = 跟随默认）；**私聊的头像颜色/首字要同时镜像到 `conv.avatar`**（顶栏读 `conv.avatar`），群聊只写 `member.avatar`。② `js/core/context.js` 第 [5] 段 `buildToolAndTimeText(tools, now, timeZone)`：首行 `当前时间：YYYY-MM-DD HH:MM（周X）· <tz>`，次行工具清单表头，之后每行 `- 名字：描述第一句`（超 `TOOL_LINE_MAX = 60` 字截断加「…」），工具为空时只出时间行；`buildContext` 新增 `opts.tools/opts.now/opts.timeZone`，`parts` 多出 `tools` 键。③ `js/core/tools/index.js` 返回六个工具。④ 两卡（dev-c）把 `tools`（只 `{name,description}`）与 `now: new Date()` 喂进去，并加 `getResponder` / `onChanged`（`chat-direct.js:536`、`chat-group.js:747`；群聊 `currentResponder` 在队列循环里赋值，闭包读可变字段）。**lead 在 dev-a 中途失败后补的两处**：`profile.js` 缺 `loadConversation()` / `isDirect()` 定义（会让 `set_name` 直接 ReferenceError）、`set_look` 的私聊头像镜像。 |
 | 2026-11-25 | dev-a | **`profile.js` 落地 + 私聊/群聊镜像口径的实测（承接上面 lead 那条）**：最终 294 行，三个辅助函数 `loadConversation(store, id)`（`store.getConversation` 读不到就返回 `null`，不让工具崩）、`kindOf(conv)`（`"direct"`/`"group"`/`null`）、`isDirect(conv)`（`kindOf !== "group"`；**读不到会话按私聊处理**，老数据没有 `kind`，不镜像会话的话改名等于没改）。`set_name`：私聊 → `updateConversation(convId, {title})` + `updateMember(id, {name, avatar:{...avatar,label:首字}})`；群聊 → 只 `updateMember`，返回文案 `已把你在本群的名字改成「X」（群名不变）`。`set_look`：`avatarColor`/`avatarLabel` 私聊同时写 `conv.avatar`（基于 `conv.avatar` 合并，不整体替换）与 `member.avatar`，群聊只写 `member.avatar`；`wallpaper` 一律 `updateConversation(convId, {wallpaper: v==="default" ? null : v})`。`set_persona` 不碰会话。`onChanged` 的 `kind` 仍是 `"name"|"persona"|"look"|"wallpaper"`，`try/catch` 包住、工具不依赖它。**上下文第 [5] 段**：同一时刻换时区真的换墙上时间 —— `2026-11-25T02:30+08:00` 在 `Asia/Singapore` 得 `2026-11-25 02:30（周三）`、在 `America/New_York` 得 `2026-11-24 13:30（周二）`（用 `Intl.DateTimeFormat.formatToParts` 取数，`Date.getHours()` 只给本机时区、`timeZone` 会被忽略）。工具清单：描述先按行/句末标点取第一句，再按 `TOOL_LINE_MAX=60` 截断加「…」（59 字的描述原样保留、无句号的 80 字描述截成 60+「…」）。自测（`%TEMP%\probe-profile-tools3.mjs`，假 store 记录调用）**43 passed / 0 failed**，覆盖：六段顺序 `规则|你是甲|压缩块|备忘|时间|消息`、`parts` 六键、缺省 `tools` 仍有时间行、`set_name` 私聊两处都写 / 群聊只写成员且群名不变、`set_persona` 整段替换与清空、`set_look` 私聊镜像 `conv.avatar` / 群聊不碰、`default → null`、空参数与非法颜色报 `bad_args`、无 `onChanged` 也能改、无发言人报 `no_responder`、`createTools` 六个且三个 profile 工具 `sequential`。 |
 | 2026-11-25 | lead | **两张详情卡订阅 `profile:changed`（补齐模型改自己后详情页不刷新的缺口）**：`grep profile:changed js/` 原先只有 emit（`chat-direct.js:743` / `chat-group.js:1025`），没有任何订阅者 —— 模型调 `set_name/set_persona/set_look` 后，聊天卡当场变、**停在详情页时看不到变化**。两张卡各加三件：模块级 `var profileOff = null`、`function refreshFromStore()`、`mount()` 里 `profileOff = ctx.events.on("profile:changed", …)`、`unmount()` 里退订。`refreshFromStore()` 的守卫分别用 `!mounted || nameEditor || personaDirty`（私聊：名字编辑中/人格未落盘不重画）与 `!mounted || nameEditor || boardDirty`（群聊：再加公告板未落盘），`convId` 不匹配直接 return，内部走既有 `load()` → `render()`（群聊等价于原 `rerender()` 但先重读库）。真应用实测（8917，space 51）：私聊 detail-direct 停在页面上时调 `set_name("验收小名")` → 详情 `.name-text` 当场变、`conv.title` 同步；`set_persona` → textarea 当场变；`set_look({avatarColor:"#00a884",avatarLabel:"验",wallpaper:"dusk"})` → `.big-ava` `rgb(0,168,132)`/文字「验」、壁纸 select 显示「暮紫」；群聊 detail-group 调 `set_name` 把成员「乙」改成「丙丁」→ 成员墙 `.m-ava` 由「乙」变「丙」（`avatarLabel` 取首字），群名「验收群」不变。验收后已把测试会话改名/头像/人格还原（`persona` 复原为 `DEFAULT_PERSONA`）、验收群删除。门禁：两个文件 `node --check` exit 0、`sync-www.mjs` ready、`static-gate.mjs` 通过（含 28 个 js 模块解析）、`probe-shell-list.mjs` 23 passed / 0 failed。 |
+| 2026-11-25 | dev-c | **工具条 `.tool-line` 与气泡区「正在输入」永久下线（用户 m08249 口径），状态只走顶栏；流式气泡改懒建**：两卡删 `TOOL_LINE_MAX` / `toolCallNames` / `toolLineText` / `showToolNote` 整组，改 `hasVisibleText(msg)`（`content.trim()` 非空才算可见）；`messageRow()` 对无可见正文返回 `null`，`renderMessages()` / `appendMessage()` 判 null 跳过（不画行、不画空气泡、不显示工具名）。顶栏 `.sub` 成为唯一反馈：`subText()` + `setBusy(on)`（私聊 `正在输入中…`/`在线`，群聊 `正在输入中…`/`N 位成员`）。`startStreamBubble()` 改懒建（开流不建 DOM），新增幂等的 `ensureStreamBubble(live)`，首个 `text_delta` 或失败才建行；`AbortError` 时若已建则移除，不留「已停止」空气泡。群聊 `setTyping(member, extra)` 只路由到 `setBusy`，`extra` 用 `void` 丢弃。`css/card-chat.css` 删掉 `.typing` / `.typing-dots` / `.typing-dots .anim-typing` / `.tool-line` 四组共 **33 行**（原 `:155-186`），文件现 153 行、`typing|tool-line` 命中 0。口径与验收写进 `docs/DEV.md` §2.6.1。 |

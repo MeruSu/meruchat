@@ -122,32 +122,12 @@ function paintBubble(bubbleEl, accent) {
   bubbleEl.style.setProperty("--accent-soft", th.soft);
 }
 
-/** 工具条最多列几个名字（再多就折成「等 N 个工具」） */
-const TOOL_LINE_MAX = 3;
-
-/** 一条消息里所有工具调用的名字（保持出现顺序） */
-function toolCallNames(msg) {
-  const parts = msg && Array.isArray(msg.parts) ? msg.parts : [];
-  const names = [];
-  parts.forEach((p) => {
-    if (!p || p.type !== "tool-call") return;
-    names.push(typeof p.name === "string" && p.name ? p.name : "工具");
-  });
-  return names;
-}
-
-/** 工具条的文案。返回空串表示"这条不该画工具条"：
- *  有可见正文的消息正文优先；没有工具调用的空消息什么都不画（也不画空气泡）。 */
-function toolLineText(msg) {
-  if (!msg || msg.role === "user") return "";
-  const text = msg.content == null ? "" : String(msg.content);
-  if (text.trim() !== "") return "";
-  const names = toolCallNames(msg);
-  if (!names.length) return "";
-  if (names.length > TOOL_LINE_MAX) {
-    return "⚙ 调用了 " + names.slice(0, TOOL_LINE_MAX).join("、") + " 等 " + names.length + " 个工具";
-  }
-  return "⚙ 调用了 " + names.join("、");
+/** 工具调用与思考过程一律不显示（用户定的口径）：
+ *  只有"这一条有可见正文"的消息才画气泡；只走过工具调用的那一轮直接不画行。
+ *  工具/思考阶段的状态只体现在顶栏状态行（见 setBusy）。 */
+function hasVisibleText(msg) {
+  if (!msg) return false;
+  return String(msg.content == null ? "" : msg.content).trim() !== "";
 }
 
 /** 入场动效只挂一次：加 .anim-enter，动画结束后自己摘掉。
@@ -192,6 +172,7 @@ const card = {
     this.messages = [];
     this.conv = null;
     this.streaming = false;
+    this.busy = false;
     this.controller = null;
     this.unmounted = false;
 
@@ -243,7 +224,7 @@ const card = {
     this.sendBtn.addEventListener("click", () => this.onSendClick());
   },
 
-  /** 私聊顶栏：对方首字圆 + 对方名字 + 状态行「在线」 */
+  /** 私聊顶栏：对方首字圆 + 对方名字 + 状态行（空闲「在线」/ 干活时「正在输入中…」） */
   mountHead() {
     if (!this.chatEl) return;
     const head = chatHead({
@@ -251,7 +232,7 @@ const card = {
       avaColor: resolveAvaColor(this.conv, this.ctx.settings || {}),
       avaImage: this.conv && this.conv.avatar && this.conv.avatar.image,
       name: this.convTitle(),
-      sub: "在线",
+      sub: this.subText(),
       onBack: () => this.goBack(),
       onMore: () => this.openDetail(),
     });
@@ -267,6 +248,17 @@ const card = {
 
   headAva() {
     return String(this.convTitle()).slice(0, 1).toUpperCase();
+  },
+
+  /** 顶栏状态行文案。busy = 这一轮在跑（思考 / 调工具 / 吐字都算）。 */
+  subText() {
+    return this.busy ? "正在输入中…" : "在线";
+  },
+
+  /** 工具调用与思考不显示在消息区，只把顶栏状态行切成「正在输入中…」；false 时切回「在线」 */
+  setBusy(on) {
+    this.busy = !!on;
+    if (this.subEl) this.subEl.textContent = this.subText();
   },
 
   /** 数据每次进栈都重读（成员/消息可能在详情页改过） */
@@ -417,16 +409,20 @@ const card = {
       this.bodyEl.appendChild(el("div", "note", "发条消息开始聊天"));
       return;
     }
-    visible.forEach((m) => this.bodyEl.appendChild(this.messageRow(m)));
+    visible.forEach((m) => {
+      const row = this.messageRow(m);
+      if (row) this.bodyEl.appendChild(row);
+    });
     this.scrollBottom();
   },
 
   /** 增量入口：只追加这一条，并给它挂入场动效（唯一的"新增节点"通道） */
   appendMessage(msg) {
     if (!this.bodyEl) return null;
+    const row = this.messageRow(msg);
+    if (!row) return null;
     const hint = this.bodyEl.querySelector(".note");
     if (hint) hint.remove();
-    const row = this.messageRow(msg);
     this.bodyEl.appendChild(row);
     markEnter(row);
     this.scrollBottom();
@@ -434,16 +430,13 @@ const card = {
   },
 
   /** 一条消息 = .row.them / .row.me > .bubble，不加名字标签、不加消息头像。
-   *  没有可见正文、只走过工具调用的那一轮改画一行 .tool-line（不留空气泡）。 */
+   *  没有可见正文的（只走过工具调用 / 只有思考）返回 null：不画行、不留空气泡、也不显示工具名。 */
   messageRow(msg) {
+    if (!msg) return null;
+    if (!hasVisibleText(msg)) return null;
     const mine = msg.role === "user";
     const row = el("div", mine ? "row me" : "row them");
-    const toolText = toolLineText(msg);
-    if (toolText) {
-      row.appendChild(el("div", "tool-line", toolText));
-      return row;
-    }
-    const bubbleEl = el("div", "bubble", msg.content == null ? "" : String(msg.content));
+    const bubbleEl = el("div", "bubble", String(msg.content));
     paintBubble(bubbleEl, resolveAccent(this.conv, this.ctx.settings || {}));
     row.appendChild(bubbleEl);
     return row;
@@ -481,6 +474,7 @@ const card = {
     if (this.controller) {
       try { this.controller.abort(); } catch (e) { /* 已结束的 signal 忽略 */ }
     }
+    this.setBusy(false);
   },
 
   setStreaming(on) {
@@ -546,11 +540,14 @@ const card = {
     });
 
     this.controller = new AbortController();
+    // 折叠本身也要调模型（摘要），所以从这一刻起就算「正在输入中…」
+    this.setBusy(true);
     // 折叠 + 拼上下文必须在开流之前完成（§2.6：流式过程中绝不折叠）
     // 工具清单用本轮真正交给模型的那一份，不另拼
     const messages = await this.prepareContext(member, { tools });
     if (this.unmounted || this.controller.signal.aborted) {
       this.controller = null;
+      this.setBusy(false);
       return;
     }
 
@@ -559,7 +556,8 @@ const card = {
     const bubbleFor = (payload) => {
       if (!payload || !payload.text) return;
       live.full = payload.text;
-      live.bubble.textContent = live.full;
+      this.ensureStreamBubble(live);
+      if (live.bubble) live.bubble.textContent = live.full;
       this.scrollBottom();
     };
 
@@ -580,9 +578,8 @@ const card = {
           update: (id, patch) => this.ctx.store.updateMessage(id, patch),
         },
         onEvent: (name, payload) => {
+          // 工具调用 / 思考一律不显示，只保证顶栏停在「正在输入中…」
           if (name === "text_delta") bubbleFor(payload);
-          else if (name === "tool_execution_start") this.showToolNote(payload.name);
-          else if (name === "tool_execution_end" && payload && payload.isError) this.showToolNote(payload.name + " 失败：" + payload.error);
         },
       });
     } catch (e) {
@@ -590,33 +587,23 @@ const card = {
     } finally {
       this.controller = null;
       this.setStreaming(false);
+      this.setBusy(false);
       this.saveTouch();
     }
 
     if (failed && failed.name === "AbortError") {
-      live.bubble.textContent = live.full || "已停止";
+      // 一个字都没出来就停了：不留空气泡，也不留「已停止」
+      if (live.rowEl) live.rowEl.remove();
     } else if (failed) {
-      live.bubble.textContent = (live.full ? live.full + "\n" : "") + "[回复失败: " + errorText(failed) + "]";
+      this.ensureStreamBubble(live);
+      if (live.bubble) {
+        live.bubble.textContent = (live.full ? live.full + "\n" : "") + "[回复失败: " + errorText(failed) + "]";
+      }
     } else if (!live.full.trim()) {
-      // 这一轮只有工具调用、没有正文：空气泡当场移除，别等重画
-      live.rowEl.remove();
+      // 这一轮只有工具调用、没有正文：气泡本来就没建，什么都不用做
+      if (live.rowEl) live.rowEl.remove();
     }
     await this.load();
-  },
-
-  /** 工具活动的一行提示（工具名 + 结果），随后自动消失 */
-  showToolNote(text) {
-    if (!this.bodyEl || !text) return;
-    const old = this.bodyEl.querySelectorAll(".note.tool-note");
-    old.forEach((n) => n.remove());
-    const note = el("div", "note tool-note", text);
-    this.bodyEl.appendChild(note);
-    this.scrollBottom();
-    const self = this;
-    setTimeout(() => {
-      if (note.isConnected) note.remove();
-      void self;
-    }, 1500);
   },
 
   /** 只更新会话的 updatedAt。置顶与否只听用户的，发消息绝不碰 pinned。 */
@@ -626,18 +613,25 @@ const card = {
     if (this.ctx.events) this.ctx.events.emit("conv:changed", { id: this.convId });
   },
 
-  /** 流式气泡：气泡在 delta 开始前建出来，入场动效此刻挂上；delta 只改文字，不碰类。 */
+  /** 流式气泡：**开流时不建**（思考/工具阶段不该出现任何气泡），
+   *  真正有第一个字时才由 ensureStreamBubble 建出来，入场动效此刻挂上。 */
   startStreamBubble() {
     const hint = this.bodyEl ? this.bodyEl.querySelector(".note") : null;
     if (hint) hint.remove();
+    return { rowEl: null, bubble: null, full: "" };
+  },
+
+  ensureStreamBubble(live) {
+    if (!live || live.rowEl) return live;
     const row = el("div", "row them");
     const bubbleEl = el("div", "bubble", "");
     paintBubble(bubbleEl, resolveAccent(this.conv, this.ctx.settings || {}));
     row.appendChild(bubbleEl);
     if (this.bodyEl) this.bodyEl.appendChild(row);
     markEnter(row);
-    this.scrollBottom();
-    return { rowEl: row, bubble: bubbleEl, full: "" };
+    live.rowEl = row;
+    live.bubble = bubbleEl;
+    return live;
   },
 
   /** DEV.md §2.6：发新消息前先折叠，再按六段（AGENTS.md / 设定 / 压缩块 / memo / 工具与时间 / 未压缩消息）拼上下文。

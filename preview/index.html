@@ -2,8 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>卡片预览</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>meruchat · 六卡预览</title>
+<!-- 顺序必须与根 index.html 完全一致（css/style-kit.css → … → css/components.css），preview.css 永远排最后 -->
 <link rel="stylesheet" href="../css/style-kit.css" />
 <link rel="stylesheet" href="../css/theme.css" />
 <link rel="stylesheet" href="../css/motion.css" />
@@ -12,50 +13,25 @@
 <link rel="stylesheet" href="../css/card-chat.css" />
 <link rel="stylesheet" href="../css/card-detail.css" />
 <link rel="stylesheet" href="../css/card-settings.css" />
-  <link rel="stylesheet" href="../css/components.css" />
-<style>
-  html, body { margin: 0; height: 100%; }
-  body { font: 14px/1.5 Inter, -apple-system, "Segoe UI", system-ui, sans-serif; background: #f6f5f4; }
-  /* 预览用外框：顶部一条细导航，下面是这张卡片自己的舞台 */
-  #pv-bar {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 6px 10px; background: #fff; border-bottom: 1px solid #e6e6e6;
-    font-size: 12px; color: #615d59;
-  }
-  #pv-bar a { color: #0075de; text-decoration: none; padding: 2px 6px; border-radius: 6px; }
-  #pv-bar a:hover { background: #f0efee; }
-  #pv-bar a.on { background: #0075de; color: #fff; }
-  #pv-bar .sep { width: 1px; height: 14px; background: #e6e6e6; margin: 0 4px; }
-  /* 舞台：每张卡都是 9:18 竖屏（用户指定 —— 宽:高 = 9:18，即 aspect-ratio 0.5） */
-  #pv-stage {
-    position: absolute; inset: 43px 0 0 0; display: flex; padding: 8px;
-    box-sizing: border-box; justify-content: center; align-items: stretch; gap: 12px;
-  }
-  .pv-frame {
-    flex: 0 0 auto; height: 100%; aspect-ratio: 9 / 18;
-    min-width: 0; display: flex;
-  }
-  .pv-frame > .card { flex: 1 1 auto; min-width: 0; height: 100%; }
-  /* 整排模式：三列两行，每张卡仍是严格的 9:18 竖屏 */
-  #pv-stage.pv-all { flex-wrap: wrap; align-content: flex-start; overflow-y: auto; overflow-x: hidden; gap: 12px; }
-  .pv-col {
-    flex: 0 0 auto; width: calc((100% - 24px) / 3); height: auto;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .pv-col > .pv-tag { flex: 0 0 auto; font: 11px/1.4 ui-monospace, monospace; color: #615d59; text-align: center; }
-  .pv-col > .pv-frame { flex: 0 0 auto; width: 100%; height: auto; aspect-ratio: 9 / 18; overflow: hidden; }
-  /* 卡片自己不能把 9:18 的外框撑高：高度交回给外框，超出部分内部滚动 */
-  .pv-frame > .card { flex: 1 1 auto; width: 100%; height: 100%; max-height: 100%; min-height: 0; overflow-y: auto; }
-  #pv-err {
-    margin: 8px; padding: 10px 12px; border-radius: 8px;
-    background: #fff1f0; border: 1px solid #ffccc7; color: #a8071a;
-    font: 12px/1.6 ui-monospace, monospace; white-space: pre-wrap;
-  }
-</style>
+<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="./preview.css" />
 </head>
-<body>
-  <div id="pv-bar"></div>
-  <div id="pv-stage"></div>
-  <script type="module" src="./harness.js"></script>
+<body data-skin="notion">
+
+<header id="pv-bar">
+  <span id="pv-title">meruchat · 六卡预览</span>
+  <span id="pv-status">连接中…</span>
+  <button id="pv-reset" type="button">重置演示数据</button>
+</header>
+<div id="pv-canvas">
+  <div class="pv-frame" data-frame="list"><div class="pv-card" id="pv-slot-list"></div></div>
+  <div class="pv-frame" data-frame="chat-direct"><div class="pv-card" id="pv-slot-chat-direct"></div></div>
+  <div class="pv-frame" data-frame="chat-group"><div class="pv-card" id="pv-slot-chat-group"></div></div>
+  <div class="pv-frame" data-frame="detail-direct"><div class="pv-card" id="pv-slot-detail-direct"></div></div>
+  <div class="pv-frame" data-frame="detail-group"><div class="pv-card" id="pv-slot-detail-group"></div></div>
+  <div class="pv-frame" data-frame="settings"><div class="pv-card" id="pv-slot-settings"></div></div>
+</div>
+
+<script type="module" src="./main.js"></script>
 </body>
 </html>
