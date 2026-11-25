@@ -49,10 +49,14 @@ function parseBudget(raw) {
 // 版本号唯一权威：android/app/build.gradle 的 versionName（真机上由 Capacitor App 插件的 getInfo() 报出来）。
 // 浏览器里没有插件 → 回落下面这个常量。版本是只读展示，绝不写进 settings（settings 只放可改的偏好）。
 const APP_VERSION = "0.1.1";
-// 版本清单走 raw.githubusercontent（CORS 放开、无限流），不走 api.github.com：
-// 后者匿名 60 次/小时/IP，且 /releases/latest 会排除 pre-release，我们首个版本就是 pre-release。
-const VERSION_MANIFEST =
-  "https://raw.githubusercontent.com/MeruSu/meruchat/main/version.json";
+// 版本清单不放在 GitHub API 上：api.github.com 匿名 60 次/小时/IP，且 /releases/latest 会排除 pre-release。
+// 两个源都只读一个静态 json，按顺序试，第一个成功就用：
+//   1) raw.githubusercontent.com —— 最新，但国内网络时通时不通
+//   2) cdn.jsdelivr.net —— 有 CDN、CORS 全开，但分支缓存最长 12 小时
+const VERSION_MANIFESTS = [
+  "https://raw.githubusercontent.com/MeruSu/meruchat/main/version.json",
+  "https://cdn.jsdelivr.net/gh/MeruSu/meruchat@main/version.json",
+];
 const RELEASES_PAGE = "https://github.com/MeruSu/meruchat/releases";
 
 /** 当前 App 版本：Capacitor App 插件优先（try/catch + await），拿不到回落 APP_VERSION */
@@ -93,16 +97,23 @@ function compareVersions(a, b) {
   return 0;
 }
 
-/** 拉版本清单 → { version: "0.1.1", url }；HTTP 非 2xx / 没有 version 都抛 Error（由调用方展示） */
+/** 拉版本清单 → { version: "0.1.1", url }；所有源都失败才抛 Error（由调用方展示） */
 async function fetchLatestRelease() {
-  // raw.githubusercontent.com 带 Access-Control-Allow-Origin: *，且没有 API 限流
-  const res = await fetch(VERSION_MANIFEST, { cache: "no-store" });
-  if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "???"));
-  const data = await res.json();
-  const ver = data && data.version ? String(data.version).trim() : "";
-  if (!ver) throw new Error("版本清单里没有 version");
-  const url = data && data.downloadUrl ? String(data.downloadUrl) : RELEASES_PAGE;
-  return { version: ver.replace(/^[vV]/, ""), url: url };
+  let lastErr = null;
+  for (const src of VERSION_MANIFESTS) {
+    try {
+      const res = await fetch(src, { cache: "no-store" });
+      if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "???"));
+      const data = await res.json();
+      const ver = data && data.version ? String(data.version).trim() : "";
+      if (!ver) throw new Error("版本清单里没有 version");
+      const url = data && data.downloadUrl ? String(data.downloadUrl) : RELEASES_PAGE;
+      return { version: ver.replace(/^[vV]/, ""), url: url };
+    } catch (e) {
+      lastErr = e; // 换下一个源
+    }
+  }
+  throw lastErr || new Error("拿不到版本清单");
 }
 
 /** 照 styles.html 833-869 行，逐字（壁纸 select 换成 .seg；模型接口接在最后） */
