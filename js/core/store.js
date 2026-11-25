@@ -36,8 +36,11 @@ const WALLPAPER_ALIASES = {
   dusk: "dusk",
 };
 
-/** 上下文预算默认值（§2.6）：8000 token；0 = 关闭压缩，全量直喂 */
-export const DEFAULT_CONTEXT_BUDGET = 8000;
+/** 上下文预算默认值（§2.6）：100000 token，到预算只提醒模型自己折；0 = 关闭压缩，全量直喂 */
+export const DEFAULT_CONTEXT_BUDGET = 100000;
+
+/** 预算上限（§2.6）：模型窗口 100 万，再往上填没有意义 */
+export const MAX_CONTEXT_BUDGET = 1000000;
 
 /**
  * 默认接口地址。
@@ -184,7 +187,7 @@ function normalizeSettings(old) {
     searchUrl: typeof s.searchUrl === "string" && s.searchUrl ? s.searchUrl : DEFAULT_SETTINGS.searchUrl,
     searchKey: typeof s.searchKey === "string" ? s.searchKey : "",
     dim: typeof s.dim === "number" ? s.dim : 0,
-    // 上下文预算（§2.6）：非数字 → 默认；负数归 0（0 = 不限，全量直喂）
+    // 上下文预算（§2.6）：非数字 → 默认 100000；负数归 0（0 = 不限，全量直喂）
     contextBudget: normalizeBudget(s.contextBudget),
     contextCompress: s.contextCompress === undefined ? DEFAULT_SETTINGS.contextCompress : !!s.contextCompress,
   });
@@ -203,11 +206,11 @@ function accentOrNull(v) {
   return s;
 }
 
-/** 上下文预算归一：非数字 → 默认 8000；负数 → 0（0 表示不限） */
+/** 上下文预算归一：非数字 → 默认 100000；负数 → 0（0 表示不限）；上限 1000000 */
 function normalizeBudget(v) {
   if (typeof v !== "number" || !isFinite(v)) return DEFAULT_CONTEXT_BUDGET;
   if (v < 0) return 0;
-  return Math.round(v);
+  return Math.min(MAX_CONTEXT_BUDGET, Math.round(v));
 }
 
 /**
@@ -1077,6 +1080,19 @@ function open() {
     return kvSet(KV_KEY, next).then(() => next);
   }
 
+  /**
+   * 老库的一次性口径修正：8000 是旧默认值，设置页现在不再暴露这个字段。
+   * 存量库里凡是**恰好等于旧默认 8000** 的，都当作没改过，抬到新默认 100000。
+   * 用户显式设过别的值（300000 / 0 / 50000…）一律不动，幂等。
+   */
+  function migrateLegacyBudget() {
+    const LEGACY_DEFAULT = 8000;
+    return getSettings().then((s) => {
+      if (s.contextBudget !== LEGACY_DEFAULT) return 0;
+      return setSettings({ contextBudget: DEFAULT_CONTEXT_BUDGET }).then(() => 1);
+    });
+  }
+
   // ================================================================ 备忘（memos）
   // 用户口径（2026-11-25）：备忘**只有一条**，是一段自由文本，**无长度上限**。
   // 表形状不变：{ conversationId, key, text, updatedAt }，主键 [conversationId, key]；
@@ -1596,7 +1612,7 @@ function open() {
     });
   }
 
-  /** 上下文相关设置（§2.6）：缺省 8000 / true */
+  /** 上下文相关设置（§2.6）：缺省 100000 / true */
   function getContextSettings() {
     return getSettings().then((s) => ({
       contextBudget: normalizeBudget(s.contextBudget),
@@ -1610,6 +1626,7 @@ function open() {
       .then(() => backfillKinds())
       .then(() => migrateMemosToSingle())
       .then(() => migrateGroupMembers())
+      .then(() => migrateLegacyBudget())
       // 迁移完顺手把每个群的成员顺序规整一遍（规整过就一行不写，幂等）：
       // 老库的 sort 可能重复，早期「按人数算 sort」的历史数据也带进来过重复。
       .then(() => dbAll("conversations"))

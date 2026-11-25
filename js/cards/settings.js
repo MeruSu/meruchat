@@ -6,7 +6,7 @@
 "use strict";
 
 import { el, errorText } from "../core/util.js";
-import { getSelf, DEFAULT_CONTEXT_BUDGET } from "../core/store.js";
+import { getSelf } from "../core/store.js";
 import { renderAvatar } from "../ui/avatar.js";
 
 const TITLE = "设置";
@@ -36,23 +36,14 @@ function accentKeyOf(settings) {
   return hit ? hit.color : ACCENTS[0].color;
 }
 
-/** 预算输入框 → 数字：空/非法回落默认，负数归 0（0 = 不限，全量直喂） */
-function parseBudget(raw) {
-  const s = String(raw == null ? "" : raw).trim();
-  if (!s) return DEFAULT_CONTEXT_BUDGET;
-  const n = Number(s);
-  if (!isFinite(n)) return DEFAULT_CONTEXT_BUDGET;
-  return Math.max(0, Math.round(n));
-}
-
 // ---------------------------------------------------------------- 检查更新（卡底）
 // 版本号唯一权威：android/app/build.gradle 的 versionName（真机上由 Capacitor App 插件的 getInfo() 报出来）。
 // 浏览器里没有插件 → 回落下面这个常量。版本是只读展示，绝不写进 settings（settings 只放可改的偏好）。
 const APP_VERSION = "0.1.1";
 // 版本清单不放在 GitHub API 上：api.github.com 匿名 60 次/小时/IP，且 /releases/latest 会排除 pre-release。
 // 两个源都只读一个静态 json，按顺序试，第一个成功就用：
-//   1) raw.githubusercontent.com —— 最新，但国内网络时通时不通
-//   2) cdn.jsdelivr.net —— 有 CDN、CORS 全开，但分支缓存最长 12 小时
+//   1) raw.githubusercontent.com：最新，但国内网络时通时不通
+//   2) cdn.jsdelivr.net：有 CDN、CORS 全开，但分支缓存最长 12 小时
 const VERSION_MANIFESTS = [
   "https://raw.githubusercontent.com/MeruSu/meruchat/main/version.json",
   "https://cdn.jsdelivr.net/gh/MeruSu/meruchat@main/version.json",
@@ -172,19 +163,6 @@ function buildAsideHtml() {
     '<div class="field">' +
     '<button class="btn" id="saveBtn" type="button">保存</button>' +
     "</div>" +
-    '<div class="section-title">上下文</div>' +
-    '<div class="field">' +
-    '<label class="lbl" for="contextBudgetInput">上下文预算（token）</label>' +
-    '<input id="contextBudgetInput" type="number" min="2000" max="100000" step="1000" inputmode="numeric" />' +
-    '<div class="lbl" id="budgetHint"></div>' +
-    "</div>" +
-    '<div class="field">' +
-    '<label class="lbl">自动压缩</label>' +
-    '<div class="seg" id="compressSel">' +
-    '<button type="button" data-compress="1">开</button>' +
-    '<button type="button" data-compress="0">关</button>' +
-    "</div>" +
-    "</div>" +
     '<div class="section-title">搜索</div>' +
     '<div class="field">' +
     '<label class="lbl" for="searchUrlInput">搜索地址</label>' +
@@ -246,23 +224,6 @@ export default {
     this.searchUrlInput = searchUrlInput;
     this.searchKeyInput = searchKeyInput;
 
-    // 上下文（§2.6）：预算 + 自动压缩开关
-    const budgetInput = wrap.querySelector("#contextBudgetInput");
-    const budgetHint = wrap.querySelector("#budgetHint");
-    const compressSeg = wrap.querySelector("#compressSel");
-    this.budgetInput = budgetInput;
-    this.budgetHint = budgetHint;
-    this.compressEls = Object.create(null);
-    if (budgetInput) budgetInput.addEventListener("input", () => this.syncBudgetHint());
-    if (compressSeg) {
-      ["1", "0"].forEach((flag) => {
-        const b = compressSeg.querySelector('[data-compress="' + flag + '"]');
-        if (!b) return;
-        b.addEventListener("click", () => this.apply({ contextCompress: flag === "1" }));
-        this.compressEls[flag] = b;
-      });
-    }
-
     // 点自己的名字 = 改名（表单形态与设计稿一致：纯文本 + 点击弹输入）
     nameTextEl.addEventListener("click", () => this.renameSelf());
     saveBtn.addEventListener("click", () =>
@@ -272,8 +233,6 @@ export default {
         apiKey: keyInput.value.trim(),
         searchUrl: searchUrlInput.value.trim(),
         searchKey: searchKeyInput.value.trim(),
-        contextBudget: budgetInput ? budgetInput.value : undefined,
-        contextCompress: this.currentCompress(),
       })
     );
 
@@ -354,37 +313,6 @@ export default {
     for (const key of Object.keys(this.wallEls || {})) {
       this.wallEls[key].classList.toggle("active", key === wall);
     }
-
-    // 上下文（§2.6）：预算 / 自动压缩
-    const budget = typeof st.contextBudget === "number" ? st.contextBudget : DEFAULT_CONTEXT_BUDGET;
-    // 正在输入时不要用设置值盖掉用户的手输
-    if (this.budgetInput && this.budgetInput !== document.activeElement) {
-      this.budgetInput.value = String(budget);
-    }
-    const compressOn = st.contextCompress !== false;
-    for (const key of Object.keys(this.compressEls || {})) {
-      this.compressEls[key].classList.toggle("active", (key === "1") === compressOn);
-    }
-    this.syncBudgetHint();
-  },
-
-  /** 预算提示：0 → 不限（全量直喂）；否则说明超预算会折叠最旧的一批 */
-  syncBudgetHint() {
-    if (!this.budgetHint) return;
-    const budget = parseBudget(this.budgetInput ? this.budgetInput.value : "");
-    const on = this.ctx && this.ctx.settings ? this.ctx.settings.contextCompress !== false : true;
-    if (!budget) {
-      this.budgetHint.textContent = "不限（全量直喂）";
-      return;
-    }
-    this.budgetHint.textContent =
-      "超过 " + budget + " token 后折叠最旧的一批" + (on ? "" : "（自动压缩已关，暂不生效）");
-  },
-
-  /** 自动压缩开关当前选择（seg 高亮为准，回落设置值） */
-  currentCompress() {
-    const st = (this.ctx && this.ctx.settings) || {};
-    return st.contextCompress !== false;
   },
 
   // ================================================================ 自己
@@ -426,9 +354,9 @@ export default {
       apiKey: patch.apiKey || "",
       searchUrl: patch.searchUrl || "",
       searchKey: patch.searchKey || "",
-      // 上下文（§2.6）：预算输入框 → 数字（0 = 不限）；开关默认沿用当前值
-      contextBudget: patch.contextBudget === undefined ? cur.contextBudget : parseBudget(patch.contextBudget),
-      contextCompress: patch.contextCompress === undefined ? cur.contextCompress !== false : !!patch.contextCompress,
+      // 上下文预算与开关不在设置页暴露（用户要求删掉这块）：这里透传现值，不覆盖
+      contextBudget: cur.contextBudget,
+      contextCompress: cur.contextCompress !== false,
     };
     const next = await store.setSettings(clean);
     this.ctx.settings = next;

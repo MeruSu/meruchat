@@ -25,7 +25,7 @@ import {
 // Billion Context：拼上下文与折叠的唯一实现点（DEV.md §2.6）。卡片只调用，不自己拼。
 import { buildContext, foldOldest } from "../core/context.js";
 // 壁纸只有一个口径：store.js 解析、theme.js 落 DOM；本卡不写内联背景
-import { resolveWallpaper } from "../core/store.js";
+import { resolveWallpaper, DEFAULT_CONTEXT_BUDGET } from "../core/store.js";
 import { applyWallpaperLayer } from "../core/theme.js";
 import * as themeNs from "../core/theme.js";
 // 头像字色（含浅色底的描边）唯一实现在 js/ui/avatar.js，换底色时必须跟着重算
@@ -471,6 +471,13 @@ const card = {
       ctx.events.on("settings:applied", () => {
         this.renderWallpaper();
         this.renderAccent();
+      })
+    );
+    // 模型调 fold_context 折完之后重算统计：context_info 读的就是 this.contextStats
+    put(
+      ctx.events.on("context:folded", (p) => {
+        if (p && p.convId && p.convId !== this.convId) return;
+        this.refreshContextStats();
       })
     );
     put(
@@ -958,6 +965,38 @@ const card = {
   /** DEV.md §2.6：每个成员发言前各自折叠 + 拼一次上下文（responder.id 决定哪条 assistant 算自己的）。
    *  群规则并进 [2] 设定那一段（memberSystemPrompt 已含 persona），**不新增 system 段**。
    *  this.messages 只负责渲染，喂模型的一律是这里的返回值。 */
+  /** 只重算统计（折叠之后调）：不折叠、不发请求、不动 this.messages，只更新 this.contextStats。
+   *  群聊的 [2] 段要人工拼上 memberSystemPrompt 的群规则，与 prepareContext 同一口径。 */
+  async refreshContextStats() {
+    const store = this.ctx.store;
+    try {
+      const member = this.currentResponder || (this.members && this.members[0]) || null;
+      const responder = member
+        ? Object.assign({}, member, {
+            persona: memberSystemPrompt({ member, members: this.members, userName: selfIdentity().name }),
+          })
+        : null;
+      const [messages, blocks, memo] = await Promise.all([
+        typeof store.listUnfoldedMessages === "function" ? store.listUnfoldedMessages(this.convId) : Promise.resolve([]),
+        typeof store.listBlocks === "function" ? store.listBlocks(this.convId) : Promise.resolve([]),
+        typeof store.getMemo === "function" ? store.getMemo() : Promise.resolve(""),
+      ]);
+      const built = buildContext({
+        conv: this.conv,
+        members: this.members,
+        responder,
+        messages: (messages || []).slice().sort((a, b) => (a.seq || a.ts || 0) - (b.seq || b.ts || 0)),
+        blocks: blocks || [],
+        memo: memo || "",
+        now: new Date(),
+      });
+      this.contextStats = Object.assign({}, built, { blocks: (blocks || []).length, tools: this.lastTools || [] });
+    } catch (e) {
+      /* 统计算不出来不影响聊天 */
+    }
+  },
+
+  /** 群聊里的 [2] 段 = 成员设定 + 群规则 */
   async prepareContext(member, extraUserLines, opts) {
     const noFold = !!(opts && opts.fold === false);
     const store = this.ctx.store;
@@ -968,7 +1007,9 @@ const card = {
         ? opts.tools
         : createTools({ store, getSettings: () => this.ctx.settings || {}, convId: this.convId });
     const settings = this.ctx.settings || {};
-    const budget = Number(settings.contextBudget == null ? 8000 : settings.contextBudget) || 0;
+    // 记住本轮的工具清单：折叠之后重算统计时 [5] 段要跟这一轮一致，不能空着
+    this.lastTools = Array.isArray(tools) ? tools : [];
+    const budget = Number(settings.contextBudget == null ? DEFAULT_CONTEXT_BUDGET : settings.contextBudget) || 0;
     const compress = settings.contextCompress !== false;
     const signal = this.turn && this.turn.abort ? this.turn.abort.signal : undefined;
     const responder = Object.assign({}, member || {}, {

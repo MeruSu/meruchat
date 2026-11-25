@@ -1,9 +1,10 @@
 // js/core/tools/index.js — 工具清单的唯一出口
 // 卡片不要各自 new 工具：一律 `createTools({ store, getSettings, ... })` 拿同一份。
-// 现在十三个工具：
+// 现在十四个工具：
 //   web_search（联网搜索，只回 title/url/snippet）
 //   memo（单条备忘，整段覆盖）
 //   context_info（只读自查：当前上下文多长、还剩多少预算）
+//   fold_context（把最旧的一批折成摘要，到预算后模型自己决定要不要折）
 //   set_name / set_persona / set_look（改「你自己」= 这一轮发言的成员，DEV.md §2.6）
 //   list_conversations / get_conversation（只读：查会话 id、看别人的人设）
 //   join_group / invite_to_group / kick_from_group / remove_user（会话之间的关系，DEV.md §2.7）
@@ -14,6 +15,7 @@
 import { createWebSearchTool } from "./web-search.js";
 import { createMemoTool } from "./memo.js";
 import { createContextInfoTool } from "./context-info.js";
+import { createFoldTool } from "./fold.js";
 import { createSetNameTool, createSetPersonaTool, createSetLookTool } from "./profile.js";
 import {
   createListConversationsTool,
@@ -35,7 +37,7 @@ import { createTakeScreenTool } from "./screen.js";
  *   onChanged?: (change: object) => void,
  *   emit?: (event: string, payload?: object) => void
  * }} deps
- * @returns {Array<object>} 工具列表（顺序：web_search / memo / context_info / set_name / set_persona / set_look /
+ * @returns {Array<object>} 工具列表（顺序：web_search / memo / context_info / fold_context / set_name / set_persona / set_look /
  *   list_conversations / get_conversation / join_group / invite_to_group / kick_from_group / remove_user / take_screen）
  */
 export function createTools({ store, getSettings, getContextStats, convId, getResponder, onChanged, emit } = {}) {
@@ -43,6 +45,8 @@ export function createTools({ store, getSettings, getContextStats, convId, getRe
     createWebSearchTool({ getSettings }),
     createMemoTool({ store }),
     createContextInfoTool({ store, getSettings, getContextStats, convId }),
+    // 折叠会写库（blocks + foldedBlockId），工具自己声明了 sequential
+    createFoldTool({ store, getSettings, convId, getResponder, emit }),
     createSetNameTool({ store, convId, getResponder, onChanged }),
     createSetPersonaTool({ store, convId, getResponder, onChanged }),
     createSetLookTool({ store, convId, getResponder, onChanged }),
@@ -61,6 +65,7 @@ export {
   createWebSearchTool,
   createMemoTool,
   createContextInfoTool,
+  createFoldTool,
   createSetNameTool,
   createSetPersonaTool,
   createSetLookTool,

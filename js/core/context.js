@@ -28,6 +28,12 @@ export const TOOL_RESULT_CONTEXT_MAX = 2000;
 export const FOLD_MIN_MESSAGES = 2;
 export const FOLD_MAX_MESSAGES = 40;
 
+/**
+ * 自动折叠的硬上限（§2.6）。100k 是提醒阈值，300k 才是自动折叠的硬上限，给模型自己决策的余地：
+ * 到预算只在 [5] 段提醒模型调 fold_context，模型一直不折才由代码在 300k 兜底。
+ */
+export const AUTO_FOLD_HARD_LIMIT = 300000;
+
 /** 块数上限：新建第 9 块时把 1–4 块蒸馏成一块（T2），其余顺延重编号 */
 export const BLOCK_LIMIT = 8;
 export const DISTILL_BLOCKS = 4;
@@ -235,6 +241,18 @@ function compressOff(budget, compress) {
   return budget <= 0;
 }
 
+/** [5] 段末尾的折叠提醒（到预算才有，措辞固定，不许各卡片另写） */
+function foldHintText(estimated, budget) {
+  return (
+    "上下文已约 " +
+    estimated +
+    " token，达到预算 " +
+    budget +
+    "。如果早期内容不再需要，可以调用 fold_context 把最旧的一批折叠成摘要，" +
+    "折叠后这些消息会从上下文里移出、只留摘要。"
+  );
+}
+
 /**
  * 按 §2.6 的六段结构拼上下文。
  *
@@ -248,7 +266,7 @@ function compressOff(budget, compress) {
  * @param {Array<{name: string, description?: string}>} [opts.tools] 可用工具（[5] 段清单）
  * @param {Date|number|string} [opts.now] 当前时间，缺省 = new Date()
  * @param {string} [opts.timeZone] 时区名，缺省 = 浏览器 resolvedOptions().timeZone
- * @param {number} [opts.budget]   上下文预算 token
+ * @param {number} [opts.budget]   上下文预算 token（= 设置页的提醒阈值）
  * @param {boolean} [opts.compress] false = 不折叠（等同 budget 0）
  * @returns {{messages: Array, estimated: number, folded: number, parts: object}}
  */
@@ -300,8 +318,10 @@ export function buildContext(opts) {
   }
 
   // [5] 工具与时间 —— 一条 system，时间永远有、工具清单可能为空
-  const toolText = buildToolAndTimeText(o.tools, o.now, o.timeZone);
+  // toolsAt 记下标：到预算时要在这一条末尾追加提醒（不新起 system，也不塞进 [6]）
+  let toolText = buildToolAndTimeText(o.tools, o.now, o.timeZone);
   out.push({ role: "system", content: toolText });
+  const toolsAt = out.length - 1;
   parts.tools = estimateTokens(toolText);
 
   // [6] 未压缩消息，按 seq 升序
@@ -336,7 +356,19 @@ export function buildContext(opts) {
   });
   parts.history = estimateMessages(out.filter((m) => m.role !== "system"));
 
-  return { messages: out, estimated: estimateMessages(out), folded, parts };
+  let estimated = estimateMessages(out);
+
+  // 到预算只提醒模型自己折（§2.6）：判断只看已有入参。
+  // off 为 false 就等于「预算 > 0 且没关压缩」，所以 budget=0 时永不提醒。
+  if (!off && estimated >= o.budget) {
+    toolText = toolText + "\n\n" + foldHintText(estimated, o.budget);
+    out[toolsAt].content = toolText;
+    parts.tools = estimateTokens(toolText);
+    // 提醒本身也吃 token，改成重新整条估算，不手加减
+    estimated = estimateMessages(out);
+  }
+
+  return { messages: out, estimated, folded, parts };
 }
 
 /**
@@ -472,7 +504,9 @@ async function summarizeText(text, opts) {
           { role: "user", content: source },
         ],
         temperature: 0,
-        max_tokens: 800,
+        // 推理模型会先花掉一大截 token 思考：800 不够（实测 14 条对话时 reasoning 就吃掉整个 800，
+        // finish_reason 变成 length、content 空）。摘要本身只要 400 字符左右，放大上限不多花钱。
+        max_tokens: 2000,
         stream: false,
       }),
       signal: ctrl.signal,
@@ -504,7 +538,15 @@ async function summarizeText(text, opts) {
   const summary = String(
     (json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || ""
   ).trim();
-  if (!summary) throw new Error("摘要失败：模型返回空内容");
+  if (!summary) {
+    const finish = json && json.choices && json.choices[0] && json.choices[0].finish_reason;
+    // 空内容 + finish_reason=length 就是被 token 上限截断了，报清楚别让人以为模型不说话
+    throw new Error(
+      finish === "length"
+        ? "摘要失败：模型把 token 全花在推理上、正文被截断（finish_reason=length）"
+        : "摘要失败：模型返回空内容"
+    );
+  }
   return summary;
 }
 
@@ -541,6 +583,7 @@ export async function summarizeBlock(opts) {
  * @param {string} opts.apiKey
  * @param {string} opts.model
  * @param {AbortSignal} [opts.signal]
+ * @param {boolean} [opts.force]   true = 忽略硬上限直接折（模型自己决定要折时用）
  * @returns {Promise<{folded: number, reason?: string, error?: string, block?: object}>}
  */
 export async function foldOldest(opts) {
@@ -561,10 +604,11 @@ export async function foldOldest(opts) {
     return { folded: 0, error: err && err.message ? err.message : String(err) };
   }
 
-  // §2.6 触发条件：estimated > budget 且未折叠消息 ≥ 4 条
+  // §2.6 自动折叠的触发条件：未压缩消息估算到硬上限（AUTO_FOLD_HARD_LIMIT）才兜底折。
+  // 用户设的 contextBudget 只是提醒阈值，模型自己调 fold_context 随时能折（force 跳过这一句）。
   const estimated = estimateMessages(unfolded);
-  if (estimated <= cfg.contextBudget) {
-    return { folded: 0, reason: "约 " + estimated + " token 未超预算 " + cfg.contextBudget };
+  if (!o.force && estimated <= AUTO_FOLD_HARD_LIMIT) {
+    return { folded: 0, reason: "约 " + estimated + " token，未到自动折叠上限 " + AUTO_FOLD_HARD_LIMIT };
   }
 
   const plan = planFold({ messages: unfolded, budget: cfg.contextBudget });

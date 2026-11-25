@@ -11,7 +11,7 @@ import { nextSeq } from "../core/group.js";
 // Billion Context：拼上下文与折叠的唯一实现点（DEV.md §2.6）。卡片只调用，不自己拼。
 import { buildContext, foldOldest } from "../core/context.js";
 // 壁纸只有一个口径：store.js 解析、theme.js 落 DOM（本卡不写内联背景，也不自己认颜色）
-import { resolveWallpaper } from "../core/store.js";
+import { resolveWallpaper, DEFAULT_CONTEXT_BUDGET } from "../core/store.js";
 import { applyWallpaperLayer } from "../core/theme.js";
 import * as themeNs from "../core/theme.js";
 import * as storeModule from "../core/store.js";
@@ -375,6 +375,13 @@ const card = {
       this.renderAccent();
       this.renderWallpaper();
     }));
+    // 模型调 fold_context 折完之后重算统计：context_info 读的就是 this.contextStats
+    put(
+      ctx.events.on("context:folded", (p) => {
+        if (p && p.convId && p.convId !== this.convId) return;
+        this.refreshContextStats();
+      })
+    );
     put(
       ctx.events.on("conv:changed", (p) => {
         if (p && p.id && p.id !== this.convId) return;
@@ -707,6 +714,30 @@ const card = {
     return live;
   },
 
+  /** 只重算统计（折叠之后调）：不折叠、不发请求、不动 this.messages，只更新 this.contextStats */
+  async refreshContextStats() {
+    const store = this.ctx.store;
+    try {
+      const [messages, blocks, memo] = await Promise.all([
+        typeof store.listUnfoldedMessages === "function" ? store.listUnfoldedMessages(this.convId) : Promise.resolve([]),
+        typeof store.listBlocks === "function" ? store.listBlocks(this.convId) : Promise.resolve([]),
+        typeof store.getMemo === "function" ? store.getMemo() : Promise.resolve(""),
+      ]);
+      const built = buildContext({
+        conv: this.conv,
+        members: this.members,
+        responder: this.member ? this.member() : null,
+        messages: (messages || []).slice().sort((a, b) => (a.seq || a.ts || 0) - (b.seq || b.ts || 0)),
+        blocks: blocks || [],
+        memo: memo || "",
+        now: new Date(),
+      });
+      this.contextStats = Object.assign({}, built, { blocks: (blocks || []).length, tools: this.lastTools || [] });
+    } catch (e) {
+      /* 统计算不出来不影响聊天 */
+    }
+  },
+
   /** DEV.md §2.6：发新消息前先折叠，再按六段（AGENTS.md / 设定 / 压缩块 / memo / 工具与时间 / 未压缩消息）拼上下文。
    *  this.messages 只负责渲染，喂模型的一律是这里的返回值。 */
   async prepareContext(responder, opts) {
@@ -719,7 +750,9 @@ const card = {
         ? opts.tools
         : createTools({ store, getSettings: () => this.ctx.settings || {}, convId: this.convId });
     const settings = this.ctx.settings || {};
-    const budget = Number(settings.contextBudget == null ? 8000 : settings.contextBudget) || 0;
+    // 记住本轮的工具清单：折叠之后重算统计时 [5] 段要跟这一轮一致，不能空着
+    this.lastTools = Array.isArray(tools) ? tools : [];
+    const budget = Number(settings.contextBudget == null ? DEFAULT_CONTEXT_BUDGET : settings.contextBudget) || 0;
     const compress = settings.contextCompress !== false;
     const signal = this.controller ? this.controller.signal : undefined;
 

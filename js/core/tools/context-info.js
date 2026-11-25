@@ -6,7 +6,7 @@
 
 import { estimateMessages, estimateTokens } from "../context.js";
 
-const DEFAULT_BUDGET = 8000;
+const DEFAULT_BUDGET = 100000; // 与 store.js 的 DEFAULT_CONTEXT_BUDGET 同口径（§2.6）
 
 function codeError(code, message) {
   const e = new Error(message || code);
