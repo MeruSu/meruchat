@@ -48,7 +48,7 @@ function parseBudget(raw) {
 // ---------------------------------------------------------------- 检查更新（卡底）
 // 版本号唯一权威：android/app/build.gradle 的 versionName（真机上由 Capacitor App 插件的 getInfo() 报出来）。
 // 浏览器里没有插件 → 回落下面这个常量。版本是只读展示，绝不写进 settings（settings 只放可改的偏好）。
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.1.1";
 // 版本清单走 raw.githubusercontent（CORS 放开、无限流），不走 api.github.com：
 // 后者匿名 60 次/小时/IP，且 /releases/latest 会排除 pre-release，我们首个版本就是 pre-release。
 const VERSION_MANIFEST =
